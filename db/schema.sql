@@ -11,13 +11,15 @@ CREATE TABLE IF NOT EXISTS categories (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Seed with sensible defaults
 INSERT OR IGNORE INTO categories (name) VALUES
     ('Groceries'),
     ('Dining'),
     ('Transport'),
-    ('Utilities'),
+    ('Bills'),
+    ('Rent'),
     ('Health'),
+    ('Cosmetics and Bathroom'),
+    ('Living'),
     ('Shopping'),
     ('Entertainment'),
     ('Travel'),
