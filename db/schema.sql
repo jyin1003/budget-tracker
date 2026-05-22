@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS merchant_aliases (
 -- ------------------------------------------------------------
 -- transactions
 -- Clean records only — raw scrape data is not persisted.
+-- Amounts: negative = expense, positive = income/refund.
+-- "Already processed" is inferred from the latest date per
+-- account_id vs the statement window of each CSV file.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS transactions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

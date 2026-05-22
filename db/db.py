@@ -9,20 +9,11 @@ Usage:
         conn.execute(...)
 """
 
-import sqlite3
+import sqlite3, sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Resolve paths relative to this file so imports work from anywhere
-_DB_DIR = Path(__file__).resolve().parent
-_SCHEMA = _DB_DIR / "schema.sql"
-
-# Import the project-level DATA_DIR from config
-import sys
-sys.path.insert(0, str(_DB_DIR.parent))
-from config import DATA_DIR
-
-DB_PATH = DATA_DIR / "budget.db"
-
+from config import DATA_DIR, SCHEMA, DB_PATH, DB_DIR
 
 def get_conn() -> sqlite3.Connection:
     """
@@ -45,17 +36,22 @@ def init_db() -> None:
     Create all tables (if they don't exist) by running schema.sql.
     Safe to call on every startup — uses CREATE IF NOT EXISTS throughout.
     """
-    schema = _SCHEMA.read_text()
+    schema = SCHEMA.read_text()
     with get_conn() as conn:
         conn.executescript(schema)
     print(f"[db] Initialised database at {DB_PATH}")
 
 
 # ---------------------------------------------------------------------------
-# Convenience helpers used by the ingestion + CLI categorisation loop
+# Convenience helpers
 # ---------------------------------------------------------------------------
 
-def get_or_create_account(conn: sqlite3.Connection, name: str, account_type: str, currency: str = "AUD") -> int:
+def get_or_create_account(
+    conn: sqlite3.Connection,
+    name: str,
+    account_type: str,
+    currency: str = "AUD",
+) -> int:
     """Return the id of an account, creating it if it doesn't exist."""
     row = conn.execute("SELECT id FROM accounts WHERE name = ?", (name,)).fetchone()
     if row:
@@ -71,7 +67,7 @@ def get_or_create_account(conn: sqlite3.Connection, name: str, account_type: str
 def resolve_merchant(conn: sqlite3.Connection, raw_description: str) -> int | None:
     """
     Look up a raw description string in merchant_aliases.
-    Returns merchant_id if found, None if this description is new.
+    Returns merchant_id if found, None if this description is unknown.
     """
     row = conn.execute(
         "SELECT merchant_id FROM merchant_aliases WHERE raw_description = ?",
@@ -90,8 +86,9 @@ def save_merchant_alias(
     Persist a new merchant (if not already known) and alias the raw description to it.
     Returns the merchant_id.
     """
-    # Upsert merchant
-    row = conn.execute("SELECT id FROM merchants WHERE name = ?", (merchant_name,)).fetchone()
+    row = conn.execute(
+        "SELECT id FROM merchants WHERE name = ?", (merchant_name,)
+    ).fetchone()
     if row:
         merchant_id = row["id"]
     else:
@@ -101,7 +98,6 @@ def save_merchant_alias(
         )
         merchant_id = cur.lastrowid
 
-    # Save alias
     conn.execute(
         "INSERT OR IGNORE INTO merchant_aliases (raw_description, merchant_id) VALUES (?, ?)",
         (raw_description, merchant_id),
@@ -118,25 +114,26 @@ def insert_transaction(
     account_id: int,
     merchant_id: int | None = None,
     category_id: int | None = None,
-    source_file: str | None = None,
     notes: str | None = None,
 ) -> int | None:
     """
     Insert a transaction. Returns the new row id, or None if it was a duplicate
     (silently skipped via INSERT OR IGNORE).
+
+    Amount convention: negative = expense, positive = income/refund.
     """
     cur = conn.execute(
         """
         INSERT OR IGNORE INTO transactions
-            (date, amount, description, account_id, merchant_id, category_id, source_file, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (date, amount, description, account_id, merchant_id, category_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (date, amount, description, account_id, merchant_id, category_id, source_file, notes),
+        (date, amount, description, account_id, merchant_id, category_id, notes),
     )
     conn.commit()
     return cur.lastrowid if cur.rowcount else None
 
 
 def list_categories(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Return all categories ordered by name, for display in the CLI prompt."""
+    """Return all categories ordered by name."""
     return conn.execute("SELECT id, name FROM categories ORDER BY name").fetchall()
