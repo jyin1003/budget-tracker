@@ -18,7 +18,7 @@ INSERT OR IGNORE INTO categories (name) VALUES
     ('Bills'),
     ('Rent'),
     ('Health'),
-    ('Cosmetics and Bathroom'),
+    ('Personal Care'),
     ('Living'),
     ('Shopping'),
     ('Entertainment'),
@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     merchant_id     INTEGER REFERENCES merchants(id) ON DELETE SET NULL,
     category_id     INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     account_id      INTEGER NOT NULL REFERENCES accounts(id),
-    source_file     TEXT,                     -- e.g. "amex_2026-05.csv" for traceability
     notes           TEXT,                     -- optional manual annotation
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
 
