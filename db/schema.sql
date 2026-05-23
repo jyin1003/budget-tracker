@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS merchants (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL UNIQUE,         -- normalised, e.g. "woolworths"
+    name        TEXT NOT NULL UNIQUE,         -- normalised, e.g. "Woolworths"
     category_id INTEGER NOT NULL REFERENCES categories(id),
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -55,13 +55,13 @@ CREATE TABLE IF NOT EXISTS merchants (
 -- ------------------------------------------------------------
 -- merchant_aliases
 -- Maps raw messy description strings to a canonical merchant.
--- e.g. "WOOLWORTHS 3142 SYDNEY" -> merchants.id for "woolworths"
+-- e.g. "WOOLWORTHS 3142 SYDNEY" -> merchants.id for "Woolworths"
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS merchant_aliases (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
     raw_description TEXT NOT NULL UNIQUE,     -- exact string from bank
-    merchant_id INTEGER NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    merchant_id     INTEGER NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ------------------------------------------------------------
@@ -80,10 +80,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     category_id     INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     account_id      INTEGER NOT NULL REFERENCES accounts(id),
     notes           TEXT,                     -- optional manual annotation
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-
-    -- Prevent duplicate ingestion of the same transaction
-    UNIQUE(date, amount, description, account_id)
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_date        ON transactions(date);
