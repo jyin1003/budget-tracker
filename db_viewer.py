@@ -150,6 +150,18 @@ HTML = r"""<!DOCTYPE html>
   .pagination button:disabled { opacity: .3; cursor: default; }
   .page-info { margin: 0 4px; }
 
+  /* ── expandable rows ── */
+  .expand-btn {
+    background: none; border: 1px solid var(--border2); color: var(--muted);
+    font-family: var(--mono); font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    cursor: pointer; transition: border-color .15s, color .15s; margin-left: 6px;
+  }
+  .expand-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .expand-btn.open  { border-color: var(--accent); color: var(--accent); background: rgba(79,255,176,.07); }
+  .detail-row td { background: rgba(79,255,176,.03); border-bottom: 1px solid var(--border); padding: 10px 12px 10px 24px; }
+  .detail-row .alias-list, .detail-row .merchant-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill.alias { background: rgba(90,98,117,.18); color: var(--text); border-color: var(--border2); font-size: 10px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* ── empty / loading ── */
   .empty { padding: 60px; text-align: center; color: var(--muted); font-family: var(--mono); font-size: 12px; }
   .loading { opacity: .5; }
@@ -341,16 +353,6 @@ async function renderMerchants() {
     return `<th class="${sorted}" onclick="sortBy('${c.key}')">${c.label} <span class="sort-arrow">${arrow}</span></th>`;
   }).join('');
 
-  const tbody = res.rows.length === 0
-    ? `<tr><td colspan="5" class="empty">no merchants yet</td></tr>`
-    : res.rows.map(row => `<tr>
-        <td><strong>${esc(row.name)}</strong></td>
-        <td><span class="pill cat">${esc(row.category)}</span></td>
-        <td style="color:var(--muted)">${row.alias_count}</td>
-        <td style="color:var(--muted)">${row.tx_count}</td>
-        <td style="color:var(--muted)">${row.created_at.slice(0,10)}</td>
-      </tr>`).join('');
-
   const totalPages = Math.ceil(state.total / state.pageSize);
   const start = (state.page - 1) * state.pageSize + 1;
   const end = Math.min(state.page * state.pageSize, state.total);
@@ -361,7 +363,7 @@ async function renderMerchants() {
       <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)">${state.total} merchants</span>
     </div>
     <div class="table-wrap">
-      <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+      <table><thead><tr>${thead}</tr></thead><tbody id="merchants-tbody"></tbody></table>
     </div>
     <div class="pagination">
       <button onclick="goPage(1)" ${state.page===1?'disabled':''}>«</button>
@@ -371,6 +373,39 @@ async function renderMerchants() {
       <button onclick="goPage(${totalPages})" ${state.page>=totalPages?'disabled':''}>»</button>
     </div>
   `;
+
+  // Build rows after DOM insertion so detail <tr> siblings are parsed correctly
+  const tbody = document.getElementById('merchants-tbody');
+  if (res.rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">no merchants yet</td></tr>`;
+  } else {
+    res.rows.forEach((row, i) => {
+      const mainTr = document.createElement('tr');
+      mainTr.id = `mrow-${i}`;
+      const hasAliases = row.alias_count > 0;
+      const btnHtml = hasAliases
+        ? `<button class="expand-btn" id="mbtn-${i}">${row.alias_count} alias${row.alias_count!==1?'es':''} ▾</button>`
+        : `<span style="color:var(--muted);font-size:11px">0 aliases</span>`;
+      mainTr.innerHTML = `
+        <td><strong>${esc(row.name)}</strong></td>
+        <td><span class="pill cat">${esc(row.category)}</span></td>
+        <td>${btnHtml}</td>
+        <td style="color:var(--muted)">${row.tx_count}</td>
+        <td style="color:var(--muted)">${row.created_at.slice(0,10)}</td>`;
+      tbody.appendChild(mainTr);
+
+      const detailTr = document.createElement('tr');
+      detailTr.id = `mdetail-${i}`;
+      detailTr.className = 'detail-row';
+      detailTr.style.display = 'none';
+      detailTr.innerHTML = `<td colspan="5"><div class="alias-list" id="maliases-${i}"><span style="color:var(--muted);font-size:11px">loading…</span></div></td>`;
+      tbody.appendChild(detailTr);
+
+      if (hasAliases) {
+        document.getElementById(`mbtn-${i}`).addEventListener('click', () => toggleMerchant(i, row.name));
+      }
+    });
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -382,14 +417,6 @@ async function renderCategories() {
 
   const res = await api('categories');
 
-  const tbody = res.rows.length === 0
-    ? `<tr><td colspan="3" class="empty">no categories</td></tr>`
-    : res.rows.map(row => `<tr>
-        <td><span class="pill cat">${esc(row.name)}</span></td>
-        <td style="color:var(--muted)">${row.merchant_count} merchants</td>
-        <td style="color:var(--muted)">${row.tx_count} transactions</td>
-      </tr>`).join('');
-
   main.innerHTML = `
     <div class="toolbar">
       <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${res.rows.length} categories</span>
@@ -399,10 +426,99 @@ async function renderCategories() {
         <thead><tr>
           <th>Category</th><th>Merchants</th><th>Transactions</th>
         </tr></thead>
-        <tbody>${tbody}</tbody>
+        <tbody id="categories-tbody"></tbody>
       </table>
     </div>
   `;
+
+  const tbody = document.getElementById('categories-tbody');
+  if (res.rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" class="empty">no categories</td></tr>`;
+  } else {
+    res.rows.forEach((row, i) => {
+      const mainTr = document.createElement('tr');
+      const hasMerchants = row.merchant_count > 0;
+      const btnHtml = hasMerchants
+        ? `<button class="expand-btn" id="cbtn-${i}">${row.merchant_count} merchant${row.merchant_count!==1?'s':''} ▾</button>`
+        : `<span style="color:var(--muted);font-size:11px">0 merchants</span>`;
+      mainTr.innerHTML = `
+        <td><span class="pill cat">${esc(row.name)}</span></td>
+        <td>${btnHtml}</td>
+        <td style="color:var(--muted)">${row.tx_count} transactions</td>`;
+      tbody.appendChild(mainTr);
+
+      const detailTr = document.createElement('tr');
+      detailTr.id = `cdetail-${i}`;
+      detailTr.className = 'detail-row';
+      detailTr.style.display = 'none';
+      detailTr.innerHTML = `<td colspan="3"><div class="merchant-list" id="cmerchants-${i}"><span style="color:var(--muted);font-size:11px">loading…</span></div></td>`;
+      tbody.appendChild(detailTr);
+
+      if (hasMerchants) {
+        document.getElementById(`cbtn-${i}`).addEventListener('click', () => toggleCategory(i, row.name));
+      }
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// EXPAND: merchant aliases
+// ════════════════════════════════════════════════════════════════
+async function toggleMerchant(i, merchantName) {
+  const detail = document.getElementById(`mdetail-${i}`);
+  const btn    = document.getElementById(`mbtn-${i}`);
+  const isOpen = detail.style.display !== 'none';
+
+  if (isOpen) {
+    detail.style.display = 'none';
+    btn.classList.remove('open');
+    btn.textContent = btn.textContent.replace('▴', '▾');
+    return;
+  }
+
+  detail.style.display = '';
+  btn.classList.add('open');
+  btn.textContent = btn.textContent.replace('▾', '▴');
+
+  const container = document.getElementById(`maliases-${i}`);
+  const res = await api('aliases', { merchant: merchantName });
+  if (!res.aliases || res.aliases.length === 0) {
+    container.innerHTML = '<span style="color:var(--muted);font-size:11px">no aliases found</span>';
+    return;
+  }
+  container.innerHTML = res.aliases.map(a =>
+    `<span class="pill alias" title="${esc(a)}">${esc(a)}</span>`
+  ).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// EXPAND: category merchants
+// ════════════════════════════════════════════════════════════════
+async function toggleCategory(i, categoryName) {
+  const detail = document.getElementById(`cdetail-${i}`);
+  const btn    = document.getElementById(`cbtn-${i}`);
+  const isOpen = detail.style.display !== 'none';
+
+  if (isOpen) {
+    detail.style.display = 'none';
+    btn.classList.remove('open');
+    btn.textContent = btn.textContent.replace('▴', '▾');
+    return;
+  }
+
+  detail.style.display = '';
+  btn.classList.add('open');
+  btn.textContent = btn.textContent.replace('▾', '▴');
+
+  const container = document.getElementById(`cmerchants-${i}`);
+  const res = await api('category_merchants', { category: categoryName });
+  if (!res.merchants || res.merchants.length === 0) {
+    container.innerHTML = '<span style="color:var(--muted);font-size:11px">no merchants found</span>';
+    return;
+  }
+  container.innerHTML = res.merchants.map(m =>
+    `<span class="pill" title="${esc(m)}">${esc(m)}</span>`
+  ).join('');
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -563,7 +679,37 @@ def q_categories():
     return {"rows": [dict(r) for r in rows]}
 
 
-# ── HTTP handler ──────────────────────────────────────────────────────────────
+def q_aliases(params):
+    merchant_name = (params.get("merchant", [""])[0] or "").strip()
+    if not merchant_name:
+        return {"aliases": []}
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT ma.raw_description
+            FROM merchant_aliases ma
+            JOIN merchants m ON m.id = ma.merchant_id
+            WHERE m.name = ?
+            ORDER BY ma.raw_description
+        """, (merchant_name,)).fetchall()
+    return {"aliases": [r["raw_description"] for r in rows]}
+
+
+def q_category_merchants(params):
+    category_name = (params.get("category", [""])[0] or "").strip()
+    if not category_name:
+        return {"merchants": []}
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT m.name
+            FROM merchants m
+            JOIN categories c ON c.id = m.category_id
+            WHERE c.name = ?
+            ORDER BY m.name
+        """, (category_name,)).fetchall()
+    return {"merchants": [r["name"] for r in rows]}
+
+
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -601,6 +747,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(q_merchants(params))
             elif path == "/api/categories":
                 self.send_json(q_categories())
+            elif path == "/api/aliases":
+                self.send_json(q_aliases(params))
+            elif path == "/api/category_merchants":
+                self.send_json(q_category_merchants(params))
             else:
                 self.send_json({"error": "not found"}, 404)
         except Exception as e:
