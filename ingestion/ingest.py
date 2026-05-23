@@ -30,9 +30,7 @@ from ingestion.merchant_cli import run_merchant_cli
 from ingestion import amex_ingest
 
 INGESTERS = [
-    amex_ingest,
-    # nab_ingest,
-    # ing_ingest,
+    amex_ingest
 ]
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
