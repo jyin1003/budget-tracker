@@ -25,7 +25,18 @@ budget-tracker/
 └── requirements.txt
 ```
 
+## DB Viewer
+Lightweight browser viewer of the `budget.db`.
+- Transactions tab — paginated table, filterable by description/merchant
+- Merchants tab — all merchants with their category
+- Categories tab — category list with transaction counts
+
+Run with: `python db_viewer.py`
+Open at: [link](http://localhost:8765)
+
 ## Ingestion
+Run with: `python ingestion/ingest.py`
+
 Phase 1 — Parse
 `<merchant>_ingest.parse()`  →  reads CSVs, skips ingested ones, returns StagedFile list
 (future ingesters do the same)
