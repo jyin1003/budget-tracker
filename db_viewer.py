@@ -130,7 +130,9 @@ HTML = r"""<!DOCTYPE html>
   td.editable { cursor: pointer; }
   td.editable:hover { background: rgba(79,255,176,.05); }
   td.editable:hover::after { content: ' ✎'; font-size: 9px; color: var(--muted); }
-  td.editing { padding: 2px 0; }
+  td.editing { padding: 2px 0; cursor: default; }
+  td.editing:hover { background: none; }
+  td.editing:hover::after { content: none; }
   td.editing input, td.editing select {
     width: 100%; background: var(--surface); border: 1px solid var(--accent);
     color: var(--text); font-family: var(--mono); font-size: 12px;
@@ -240,6 +242,10 @@ const S = {
   meta: { categories:[], accounts:[] },
 };
 
+// Global flag: prevents renderTab() from firing while a cell is being edited.
+// Set to true when an edit begins, false when it commits or cancels.
+let _editInProgress = false;
+
 function esc(s) {
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -272,6 +278,7 @@ async function apiPost(ep, body) {
 // TAB SWITCHING
 // ══════════════════════════════════════════════════════════════════
 function switchTab(tab) {
+  if (_editInProgress) return; // don't switch mid-edit
   S.tab = tab; S.page = 1;
   S.sortCol = tab==='transactions' ? 'date' : 'name';
   S.sortDir = tab==='transactions' ? 'desc' : 'asc';
@@ -282,21 +289,27 @@ function switchTab(tab) {
 }
 
 function renderTab() {
+  if (_editInProgress) return; // never re-render while editing
   if (S.tab==='transactions') renderTransactions();
   else if (S.tab==='merchants') renderMerchants();
   else renderCategories();
 }
 
 function sortBy(col) {
+  if (_editInProgress) return;
   if (S.sortCol===col) S.sortDir = S.sortDir==='asc'?'desc':'asc';
   else { S.sortCol=col; S.sortDir='asc'; }
   S.page=1; renderTab();
 }
-function goPage(p) { S.page=p; renderTab(); }
+function goPage(p) {
+  if (_editInProgress) return;
+  S.page=p; renderTab();
+}
 
 let _deb;
 function debounceFilter() { clearTimeout(_deb); _deb=setTimeout(applyFilters,280); }
 function applyFilters() {
+  if (_editInProgress) return;
   S.filters.q         = document.getElementById('q')?.value ?? '';
   S.filters.category  = document.getElementById('filter-cat')?.value ?? '';
   S.filters.account   = document.getElementById('filter-acc')?.value ?? '';
@@ -305,6 +318,7 @@ function applyFilters() {
   S.page=1; renderTab();
 }
 function clearFilters() {
+  if (_editInProgress) return;
   S.filters={q:'',category:'',account:'',amountMin:'',amountMax:''};
   S.page=1; renderTab();
 }
@@ -335,52 +349,136 @@ function paginationHtml(totalPages, start, end) {
 // ══════════════════════════════════════════════════════════════════
 // INLINE EDIT HELPERS
 // ══════════════════════════════════════════════════════════════════
+
+/**
+ * makeEditableText — replaces a td's content with a text input.
+ *
+ * Commit triggers: Enter key, or clicking anywhere outside the td.
+ * Cancel trigger:  Escape key.
+ *
+ * Uses a mousedown listener on document to detect outside clicks
+ * BEFORE blur fires, so we can distinguish "clicked away to save"
+ * from "blur fired because of something internal".
+ *
+ * renderTab() is NEVER called from inside these helpers — the caller
+ * decides when to re-render by setting _editInProgress = false first.
+ */
 function makeEditableText(td, value, onSave) {
+  _editInProgress = true;
+  td.classList.remove('editable');
   td.classList.add('editing');
   td.innerHTML = '';
+
   const inp = document.createElement('input');
   inp.type = 'text';
   inp.value = value ?? '';
   td.appendChild(inp);
-  inp.focus(); inp.select();
-  const done = async (save) => {
-    if (save && inp.value.trim() !== (value??'').trim()) {
-      const res = await onSave(inp.value.trim());
-      if (res?.error) { toast('Error: ' + res.error, 'err'); renderTab(); return; }
+  inp.focus();
+  inp.select();
+
+  let committed = false;
+
+  const commit = async (save) => {
+    if (committed) return;
+    committed = true;
+    document.removeEventListener('mousedown', outsideClick, true);
+
+    const newVal = inp.value.trim();
+    const changed = newVal !== (value ?? '').trim();
+
+    _editInProgress = false;
+
+    if (save && changed) {
+      const res = await onSave(newVal);
+      if (res?.error) {
+        toast('Error: ' + res.error, 'err');
+        renderTab();
+        return;
+      }
       toast('Saved ✓');
     }
     renderTab();
   };
-  inp.addEventListener('keydown', e => {
-    if (e.key==='Enter') done(true);
-    if (e.key==='Escape') done(false);
+
+  const outsideClick = (e) => {
+    if (!td.contains(e.target)) {
+      commit(true);
+    }
+  };
+
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); commit(true);  }
+    if (e.key === 'Escape') { e.preventDefault(); commit(false); }
   });
-  inp.addEventListener('blur', () => done(true));
+
+  // Add the outside-click listener with a small delay so the click
+  // that opened this editor doesn't immediately close it.
+  setTimeout(() => {
+    document.addEventListener('mousedown', outsideClick, true);
+  }, 0);
 }
 
+/**
+ * makeEditableSelect — replaces a td's content with a <select>.
+ *
+ * Commit triggers: selecting an option (change event), or clicking outside.
+ * Cancel trigger:  Escape key.
+ *
+ * The old approach used blur + setTimeout(120) which raced against renderTab.
+ * Now we use mousedown-outside detection, same pattern as makeEditableText.
+ */
 function makeEditableSelect(td, options, currentValue, onSave) {
-  // options: [{id, name}]
+  _editInProgress = true;
+  td.classList.remove('editable');
   td.classList.add('editing');
   td.innerHTML = '';
+
   const sel = document.createElement('select');
   sel.innerHTML = `<option value="">— none —</option>` +
-    options.map(o => `<option value="${o.id}" ${o.name===currentValue||o.id==currentValue?'selected':''}>${esc(o.name)}</option>`).join('');
+    options.map(o =>
+      `<option value="${o.id}" ${(o.name === currentValue || String(o.id) === String(currentValue)) ? 'selected' : ''}>${esc(o.name)}</option>`
+    ).join('');
   td.appendChild(sel);
   sel.focus();
-  const done = async (save) => {
-    if (save) {
-      const chosen = options.find(o => String(o.id)===sel.value);
-      if (chosen?.name !== currentValue) {
-        const res = await onSave(sel.value, chosen?.name);
-        if (res?.error) { toast('Error: ' + res.error, 'err'); renderTab(); return; }
-        toast('Saved ✓');
+
+  let committed = false;
+
+  const commit = async (save) => {
+    if (committed) return;
+    committed = true;
+    document.removeEventListener('mousedown', outsideClick, true);
+
+    const chosen = options.find(o => String(o.id) === sel.value);
+    const changed = (chosen?.name ?? '') !== (currentValue ?? '');
+
+    _editInProgress = false;
+
+    if (save && changed) {
+      const res = await onSave(sel.value, chosen?.name);
+      if (res?.error) {
+        toast('Error: ' + res.error, 'err');
+        renderTab();
+        return;
       }
+      toast('Saved ✓');
     }
     renderTab();
   };
-  sel.addEventListener('change', () => done(true));
-  sel.addEventListener('keydown', e => { if (e.key==='Escape') done(false); });
-  sel.addEventListener('blur', () => setTimeout(() => done(true), 120));
+
+  const outsideClick = (e) => {
+    if (!td.contains(e.target)) {
+      commit(true);
+    }
+  };
+
+  sel.addEventListener('change', () => commit(true));
+  sel.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+  });
+
+  setTimeout(() => {
+    document.addEventListener('mousedown', outsideClick, true);
+  }, 0);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -471,6 +569,7 @@ async function renderTransactions() {
 
     // delete
     tr.querySelector('.del-btn').addEventListener('click', async () => {
+      if (_editInProgress) return;
       if (!confirm(`Delete transaction: ${row.date} ${row.description}?`)) return;
       const res2 = await apiPost('delete', {table:'transactions', id:row.id});
       if (res2.error) { toast('Error: '+res2.error,'err'); return; }
@@ -480,10 +579,11 @@ async function renderTransactions() {
     // editable cells
     tr.querySelectorAll('td.editable').forEach(td => {
       td.addEventListener('click', () => {
+        if (_editInProgress) return; // ignore clicks while another edit is open
         const field = td.dataset.field;
         if (field==='merchant') {
           const opts = S.meta.merchants || [];
-          makeEditableSelect(td, opts, row.merchant, async (id, name) => {
+          makeEditableSelect(td, opts, row.merchant, async (id) => {
             return apiPost('update', {table:'transactions', id:row.id, field:'merchant_id', value:id||null});
           });
         } else if (field==='category') {
@@ -513,11 +613,11 @@ async function renderTransactions() {
 }
 
 async function addTransactionRow() {
+  if (_editInProgress) return;
   const meta = S.meta;
   const tbody = document.getElementById('tx-tbody');
   if (!tbody) return;
 
-  // remove existing new-row if any
   tbody.querySelector('.new-row')?.remove();
 
   const catOpts = meta.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
@@ -615,22 +715,22 @@ async function renderMerchants() {
       <td style="width:28px"><button class="del-btn" title="delete">✕</button></td>
     `;
 
-    // inline edit: name
-    mainTr.querySelector('[data-field="name"]').addEventListener('click', td => {
-      makeEditableText(td.currentTarget, row.name, async (val) => {
+    mainTr.querySelector('[data-field="name"]').addEventListener('click', function() {
+      if (_editInProgress) return;
+      makeEditableText(this, row.name, async (val) => {
         return apiPost('update', {table:'merchants', id:row.id, field:'name', value:val});
       });
     });
 
-    // inline edit: category
-    mainTr.querySelector('[data-field="category"]').addEventListener('click', td => {
-      makeEditableSelect(td.currentTarget, S.meta.categories, row.category, async (id) => {
+    mainTr.querySelector('[data-field="category"]').addEventListener('click', function() {
+      if (_editInProgress) return;
+      makeEditableSelect(this, S.meta.categories, row.category, async (id) => {
         return apiPost('update', {table:'merchants', id:row.id, field:'category_id', value:id||null});
       });
     });
 
-    // delete
     mainTr.querySelector('.del-btn').addEventListener('click', async () => {
+      if (_editInProgress) return;
       if (!confirm(`Delete merchant "${row.name}"? This will unlink its transactions.`)) return;
       const r = await apiPost('delete', {table:'merchants', id:row.id});
       if (r.error) { toast('Error: '+r.error,'err'); return; }
@@ -639,7 +739,6 @@ async function renderMerchants() {
 
     tbody.appendChild(mainTr);
 
-    // detail row for aliases
     const detailTr = document.createElement('tr');
     detailTr.className = 'detail-row';
     detailTr.id = `mdetail-${i}`;
@@ -659,6 +758,7 @@ async function renderMerchants() {
 }
 
 async function addMerchantRow() {
+  if (_editInProgress) return;
   const tbody = document.getElementById('m-tbody');
   if (!tbody) return;
   tbody.querySelector('.new-row')?.remove();
@@ -730,15 +830,15 @@ async function renderCategories() {
       <td style="width:28px"><button class="del-btn" title="delete">✕</button></td>
     `;
 
-    // inline edit: name
-    mainTr.querySelector('[data-field="name"]').addEventListener('click', td => {
-      makeEditableText(td.currentTarget, row.name, async (val) => {
+    mainTr.querySelector('[data-field="name"]').addEventListener('click', function() {
+      if (_editInProgress) return;
+      makeEditableText(this, row.name, async (val) => {
         return apiPost('update', {table:'categories', id:row.id, field:'name', value:val});
       });
     });
 
-    // delete
     mainTr.querySelector('.del-btn').addEventListener('click', async () => {
+      if (_editInProgress) return;
       if (!confirm(`Delete category "${row.name}"? Merchants and transactions will be unlinked.`)) return;
       const r = await apiPost('delete', {table:'categories', id:row.id});
       if (r.error) { toast('Error: '+r.error,'err'); return; }
@@ -747,7 +847,6 @@ async function renderCategories() {
 
     tbody.appendChild(mainTr);
 
-    // detail row for merchants
     const detailTr = document.createElement('tr');
     detailTr.className = 'detail-row';
     detailTr.id = `cdetail-${i}`;
@@ -767,6 +866,7 @@ async function renderCategories() {
 }
 
 async function addCategoryRow() {
+  if (_editInProgress) return;
   const tbody = document.getElementById('cat-tbody');
   if (!tbody) return;
   tbody.querySelector('.new-row')?.remove();
@@ -1007,8 +1107,6 @@ def q_insert(body):
     data  = body.get("data", {})
     if table not in _ALLOWED_TABLES:
         return {"error": "invalid table"}
-    allowed = _ALLOWED_FIELDS.get(table, set())
-    # For insert we allow the core fields plus a few extras
     _INSERT_EXTRAS = {
         "transactions": {"date", "description", "amount", "notes", "merchant_id", "category_id", "account_id"},
         "merchants":    {"name", "category_id"},
