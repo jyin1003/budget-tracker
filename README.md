@@ -64,3 +64,8 @@ When an unknown merchant is encountered you'll be prompted to:
 2. Pick an existing category **or** type `N` to create a new one
 
 The mapping is saved permanently — the same raw description will be auto-resolved in all future runs.
+
+## To Do
+- merchant_cli accepts override which tries to fit to existing
+- AMEX coles $50 should be always labelled as transport
+- dashboard shows analytics of monthly breakdown and YTD. 
