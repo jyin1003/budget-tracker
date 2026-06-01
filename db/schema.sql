@@ -68,8 +68,9 @@ CREATE TABLE IF NOT EXISTS merchant_aliases (
 -- transactions
 -- Clean records only — raw scrape data is not persisted.
 -- Amounts: negative = expense, positive = income/refund.
--- "Already processed" is inferred from the latest date per
--- account_id vs the statement window of each CSV file.
+-- source_id: optional external identifier for deduplication
+--   (e.g. Up transaction UUID "up:3ebfabfd-..."). NULL for
+--   CSV-sourced rows where no stable ID is available.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS transactions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     category_id     INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     account_id      INTEGER NOT NULL REFERENCES accounts(id),
     notes           TEXT,                     -- optional manual annotation
+    source_id       TEXT,                     -- optional external ID for deduplication
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -87,3 +89,5 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date        ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_category    ON transactions(category_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_account     ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant    ON transactions(merchant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_source_id
+    ON transactions(source_id) WHERE source_id IS NOT NULL;
