@@ -32,6 +32,11 @@ merchant_contains   = "Coles"
 amount_exact        = [50.0, 35.0]
 set_category        = "Transport"
 
+[[rules]]
+name                = "Beem merchant matching"
+merchant_contains   = "Beem"
+set_merchant        = "Beem"
+
 # ── More examples ───────────────────────────────────────────
 
 # [[rules]]
