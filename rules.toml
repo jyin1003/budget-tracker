@@ -1,0 +1,53 @@
+# rules.toml — Pre-commit transaction override rules
+#
+# Rules are evaluated in order; FIRST MATCH wins.
+# All specified conditions must match (AND logic).
+#
+# ── Match conditions (all optional, combined with AND) ──────────────────────
+#
+#   account_contains     = "Amex"       # substring match on account name (case-insensitive)
+#   merchant_contains    = "Coles"      # substring match on resolved merchant name
+#   description_contains = "COLES"      # substring match on raw description string
+#   amount_exact         = [50.0, 35.0] # abs(amount) must equal one of these values
+#   amount_min           = 10.0         # abs(amount) >= this
+#   amount_max           = 200.0        # abs(amount) <= this
+#
+# ── Override actions (at least one required) ────────────────────────────────
+#
+#   set_category = "Transport"   # force this category (must exist in DB)
+#   set_merchant = "Coles"       # force this merchant (must exist in DB)
+#                                # if set_category is omitted, inherits from merchant
+#
+# ── Notes ───────────────────────────────────────────────────────────────────
+#   - Merchant and category names must exactly match what's in the DB
+#     (case-insensitive, but spelling must be correct)
+#   - amount_exact matches absolute value, so both -50.00 and +50.00 match 50.0
+#   - Rules only run against staged (not-yet-committed) transactions
+# ────────────────────────────────────────────────────────────────────────────
+
+[[rules]]
+name                = "Coles Amex transport top-up"
+account_contains    = "Amex"
+merchant_contains   = "Coles"
+amount_exact        = [50.0, 35.0]
+set_category        = "Transport"
+
+# ── More examples ───────────────────────────────────────────
+
+# [[rules]]
+# name                = "Any Amex Uber over $80 is Travel not Transport"
+# account_contains    = "Amex"
+# merchant_contains   = "Uber"
+# amount_min          = 80.0
+# set_category        = "Travel"
+
+# [[rules]]
+# name                = "All Spotify charges → Entertainment"
+# merchant_contains   = "Spotify"
+# set_category        = "Entertainment"
+
+# [[rules]]
+# name                = "Salary deposits → Income"
+# description_contains = "EMPLOYER NAME"
+# amount_min          = 1000.0
+# set_category        = "Income"

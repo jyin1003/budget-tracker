@@ -17,6 +17,7 @@ Usage:
 import sys
 import argparse
 from pathlib import Path
+from datetime import datetime
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -49,6 +50,8 @@ YELLOW= lambda t: _c("93", t)
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    ingest_start_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
     parser = argparse.ArgumentParser(description="Ingest all bank statements.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Parse and preview without writing to DB.")
@@ -107,6 +110,11 @@ def main() -> None:
             grand_inserted += summary["inserted"]
             grand_skipped  += summary["skipped"]
             grand_errors   += summary["errors"]
+        
+        # ── Phase 3: Rules ────────────────────────────────────────────────
+        print(BOLD("\n── Phase 3: Applying rules ──"))
+        from ingestion.rules import apply_rules
+        apply_rules(conn, since=ingest_start_time)
 
         # ── Summary ───────────────────────────────────────────────────────
         print()

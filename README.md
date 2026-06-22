@@ -49,6 +49,9 @@ Phase 3 — Commit
   `<merchant>_ingest.commit()`  →  BEGIN → insert rows using resolved map → COMMIT
   (future ingesters same)
 
+Phase 4 — Rule engine override
+  `rules.py`  →  overrides certain transaction properties based on hardcoded rules
+
 ### What it does
 
 | Step | Detail |
@@ -66,6 +69,4 @@ When an unknown merchant is encountered you'll be prompted to:
 The mapping is saved permanently — the same raw description will be auto-resolved in all future runs.
 
 ## To Do
-- merchant_cli accepts override which tries to fit to existing
-- AMEX coles $50 should be always labelled as transport
 - dashboard shows analytics of monthly breakdown and YTD. 
