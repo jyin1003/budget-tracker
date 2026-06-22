@@ -13,7 +13,7 @@ Public API:
 """
 
 import sqlite3
-from ingestion.merchant_match import normalise, find_fuzzy_match
+from ingestion.merchant_match import normalise, find_candidates
 
 
 # ── ANSI colour helpers ───────────────────────────────────────────────────────
@@ -122,53 +122,88 @@ def _prompt_one(
     """
     Resolve one unknown raw description interactively.
     Returns (merchant_id, category_id) — merchant committed, alias staged.
+
+    Flow:
+      - If candidates exist, show numbered list with scores.
+          number  → accept that candidate
+          Enter   → drop into name prompt
+          text    → use as merchant name, drop into category prompt
+      - Name prompt: pre-filled with normalise(raw), Enter accepts default.
+      - Category prompt: standard numbered list.
     """
     print()
     print("─" * 64)
     print(BOLD(f"  [{index}/{total}] New merchant"))
     print(f"  Raw : {YELLOW(raw)}")
 
-    # Try fuzzy match against existing merchants
-    fuzzy = find_fuzzy_match(conn, raw)
+    candidates = find_candidates(conn, raw)
     proposed_name = normalise(raw)
 
-    if fuzzy:
-        fuzzy_id, fuzzy_name, fuzzy_cat_id = fuzzy
-        fuzzy_cat = conn.execute(
-            "SELECT name FROM categories WHERE id = ?", (fuzzy_cat_id,)
-        ).fetchone()["name"]
-        print(f"  {GREEN('Possible match:')} {fuzzy_name} {DIM(f'({fuzzy_cat})')}")
+    # ── Show candidates if any ────────────────────────────────────────────────
+    if candidates:
         print()
-        print(f"    {DIM('Y')}  Use '{fuzzy_name}'  {DIM('(suggested match)')}")
-        print(f"    {DIM('N')}  Enter a different name  {DIM(f'(default: {proposed_name})')}")
+        print(BOLD("  Possible matches:"))
+        for i, (mid, mname, mcatid, score) in enumerate(candidates, start=1):
+            cat_name = conn.execute(
+                "SELECT name FROM categories WHERE id = ?", (mcatid,)
+            ).fetchone()
+            cat_label = cat_name["name"] if cat_name else "?"
+            print(
+                f"    {CYAN(str(i))}  {mname:<30} {DIM(f'({cat_label})'):<20}  {score}%"
+            )
         print()
-        choice = input(CYAN("  Accept match? [Y/n]: ")).strip().lower()
+        print(DIM(f"  Enter a number to accept, or press Enter / type a name to override [{proposed_name}]:"))
+        raw_input = input(CYAN("  > ")).strip()
+    else:
+        print(DIM(f"  No close matches found."))
+        print(DIM(f"  Press Enter to accept suggested name, or type a custom one:"))
+        raw_input = input(CYAN(f"  Merchant name [{proposed_name}]: ")).strip()
 
-        if choice in ("", "y"):
-            # Accept fuzzy match — just stage alias, no new merchant needed
-            _stage_alias(conn, raw, fuzzy_id)
-            print(GREEN(f"  ✓ Mapped → {fuzzy_name} ({fuzzy_cat})"))
+    # ── Parse response ────────────────────────────────────────────────────────
+
+    # Numeric input with candidates → accept that candidate
+    if candidates and raw_input.isdigit():
+        idx = int(raw_input) - 1
+        if 0 <= idx < len(candidates):
+            mid, mname, mcatid, _ = candidates[idx]
+            _stage_alias(conn, raw, mid)
+            cat_label = conn.execute(
+                "SELECT name FROM categories WHERE id = ?", (mcatid,)
+            ).fetchone()["name"]
+            print(GREEN(f"  ✓ Mapped → {mname} ({cat_label})"))
             print("─" * 64)
-            return fuzzy_id, fuzzy_cat_id
+            return mid, mcatid
+        # Out-of-range number: fall through to name prompt
+        print(YELLOW(f"  Invalid number — falling through to name prompt."))
+        raw_input = ""
 
-    # No fuzzy match accepted — prompt for name
-    print(DIM("  Enter to accept suggested name, or type a custom one:"))
-    name_input = input(CYAN(f"  Merchant name [{proposed_name}]: ")).strip()
-    merchant_name = name_input if name_input else proposed_name
+    # Determine the merchant name:
+    #   - typed text (non-numeric) → use as-is, title-cased
+    #   - Enter (empty) with candidates → ask for name with default
+    #   - Enter (empty) without candidates → raw_input already IS the name
+    #     input captured above (may be empty → use proposed_name)
+    if raw_input:
+        # Typed text → use directly, skip re-prompt
+        merchant_name = raw_input.strip().title()
+    elif candidates:
+        # Enter after seeing candidates → still need to ask for name
+        name_input = input(CYAN(f"  Merchant name [{proposed_name}]: ")).strip()
+        merchant_name = name_input if name_input else proposed_name
+    else:
+        # No candidates branch — raw_input was already the name prompt response
+        # (may have text if user typed, or "" if they hit Enter → use default)
+        merchant_name = raw_input.strip().title() if raw_input else proposed_name
 
-    # Prompt for category (pre-select fuzzy cat if we had a partial match)
-    preselect = fuzzy[2] if fuzzy else None
+    preselect = candidates[0][2] if candidates else None
     category_id = _prompt_category(conn, preselect_id=preselect)
-
     merchant_id = _upsert_merchant(conn, merchant_name, category_id)
     conn.commit()
-
     _stage_alias(conn, raw, merchant_id)
 
-    cat_name = conn.execute(
+    cat_label = conn.execute(
         "SELECT name FROM categories WHERE id = ?", (category_id,)
     ).fetchone()["name"]
-    print(GREEN(f"  ✓ Mapped '{raw}' → {merchant_name} ({cat_name})"))
+    print(GREEN(f"  ✓ Mapped '{raw}' → {merchant_name} ({cat_label})"))
     print("─" * 64)
 
     return merchant_id, category_id
