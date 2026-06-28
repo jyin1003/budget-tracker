@@ -37,6 +37,11 @@ name                = "Beem merchant matching"
 merchant_contains   = "Beem"
 set_merchant        = "Beem"
 
+[[rules]]
+name                = "ChatGPT Subscription"
+merchant_contains   = "Lawrence Chen"
+set_category        = "Technology"
+
 # ── More examples ───────────────────────────────────────────
 
 # [[rules]]
