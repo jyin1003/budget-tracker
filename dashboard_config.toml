@@ -1,0 +1,48 @@
+# dashboard_config.toml — Budget Dashboard Configuration
+#
+# ── Income ──────────────────────────────────────────────────────────────────
+# Transactions with positive amounts from these accounts count as income.
+# All other positive amounts (refunds etc.) are excluded from income.
+
+[income]
+accounts = ["Up Spending"]   # Up account display names to treat as income source
+
+# ── Excluded categories ──────────────────────────────────────────────────────
+# Transactions in these categories are hidden from all dashboard sections.
+# Use this for internal transfers, noise, etc.
+
+[excluded]
+categories = ["Transfers"]
+
+# ── Budget targets (AUD/month) ───────────────────────────────────────────────
+
+[budgets]
+Dining        = 500
+Entertainment = 200
+Shopping      = 100
+Personal Care = 80
+Living        = 100
+
+# ── Dashboard sections ───────────────────────────────────────────────────────
+# Controls which categories appear in each section and how they're displayed.
+# display options: "bar_with_budget" | "bar_comparison" | "number"
+
+[[sections]]
+name       = "Social"
+display    = "bar_with_budget"
+categories = ["Dining", "Entertainment"]
+
+[[sections]]
+name       = "Lifestyle"
+display    = "bar_comparison"
+categories = ["Transport", "Groceries", "Technology", "Health", "Bills"]
+
+[[sections]]
+name       = "Watchlist"
+display    = "bar_comparison"
+categories = ["Shopping", "Personal Care", "Living"]
+
+[[sections]]
+name       = "Other"
+display    = "number"
+categories = ["Church", "Investment", "Vacation"]
