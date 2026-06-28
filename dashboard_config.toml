@@ -9,7 +9,6 @@ accounts = ["Up Spending"]   # Up account display names to treat as income sourc
 
 # ── Excluded categories ──────────────────────────────────────────────────────
 # Transactions in these categories are hidden from all dashboard sections.
-# Use this for internal transfers, noise, etc.
 
 [excluded]
 categories = ["Transfers"]
@@ -45,4 +44,4 @@ categories = ["Shopping", "Personal Care", "Living"]
 [[sections]]
 name       = "Other"
 display    = "number"
-categories = ["Church", "Investment", "Vacation"]
+categories = ["Church", "Investment", "Vacation", "Gifts"]
