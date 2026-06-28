@@ -16,15 +16,18 @@ INSERT OR IGNORE INTO categories (name) VALUES
     ('Dining'),
     ('Transport'),
     ('Bills'),
-    ('Rent'),
+    ('Church'),
     ('Health'),
     ('Personal Care'),
     ('Living'),
     ('Shopping'),
     ('Entertainment'),
-    ('Travel'),
+    ('Technology'),
+    ('Gift'),
+    ('Investment'),
     ('Income'),
     ('Transfers'),
+    ('Vacation'),
     ('Other');
 
 -- ------------------------------------------------------------
