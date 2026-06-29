@@ -7,6 +7,11 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
+
+## Run
+Run dashboard with: `python dashboard/server.py`
+Run DB viewer with: `python db_viewer.py`
+
 ## Project structure
 
 ```
