@@ -364,6 +364,10 @@ body {
     color: var(--accent);
 }
 
+.bar-v-pct.flat {
+    color: var(--muted);
+}
+
 /* ── Number cells ── */
 .number-grid {
     display: grid;

@@ -78,10 +78,6 @@ function renderSummary(data) {
 function renderVerticalBars(sec, prevLabel, hasBudget) {
   const cats = sec.categories;
 
-  // Each category gets its own scale so bars are always readable
-  // Chart height in px (CSS drives actual rendering via % heights)
-  const CHART_H = 160; // px — used for label positioning only
-
   const groups = cats.map(cat => {
     const budget = hasBudget ? (cat.budget || 0) : 0;
     const scaleMax = Math.max(cat.amount, cat.prev, budget, 1);
@@ -93,14 +89,19 @@ function renderVerticalBars(sec, prevLabel, hasBudget) {
     const isWarn = budget && cat.amount > budget * 0.8 && !isOver;
     const barCls = isOver ? 'bar-v-fill over' : isWarn ? 'bar-v-fill warning' : 'bar-v-fill normal';
 
-    // Budget marker as % of scale
     const budgetPct = budget ? (budget / scaleMax) * 100 : null;
 
-    // % change label
+    // % change label — always render something
     const diff = cat.amount - cat.prev;
-    const pct = cat.prev ? Math.round(Math.abs(diff / cat.prev) * 100) : null;
-    let diffLabel = '';
-    if (pct !== null && Math.abs(diff) > 0.5) {
+    let diffLabel;
+    if (!cat.prev && !cat.amount) {
+      diffLabel = `<span class="bar-v-pct flat">—</span>`;
+    } else if (!cat.prev) {
+      diffLabel = `<span class="bar-v-pct flat">new</span>`;
+    } else if (Math.abs(diff) < 0.5) {
+      diffLabel = `<span class="bar-v-pct flat">no change</span>`;
+    } else {
+      const pct = Math.round(Math.abs(diff / cat.prev) * 100);
       const cls = diff > 0 ? 'up' : 'down';
       const arrow = diff > 0 ? '↑' : '↓';
       diffLabel = `<span class="bar-v-pct ${cls}">${arrow}${pct}%</span>`;
