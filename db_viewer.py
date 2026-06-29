@@ -30,7 +30,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Budget DB</title>
+<title>Budget DB Viewer</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
 
@@ -219,7 +219,7 @@ HTML = r"""<!DOCTYPE html>
 <body>
 <div id="app">
   <header>
-    <div class="logo">budget<span>.</span>db</div>
+    <div class="logo">budget<span>.</span>database<span>.</span>viewer</div>
     <nav>
       <button class="active" onclick="switchTab('transactions')">transactions</button>
       <button onclick="switchTab('merchants')">merchants</button>
