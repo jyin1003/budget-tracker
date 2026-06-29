@@ -205,7 +205,6 @@ body {
 
 /* ── Vertical bar chart ── */
 
-/* Section body overide for bar layout */
 .section-body.bar-v-section {
     flex-direction: row;
     align-items: flex-end;
@@ -214,7 +213,6 @@ body {
     overflow-x: auto;
 }
 
-/* One group = one category: two bars side by side */
 .bar-v-group {
     flex: 1;
     min-width: 80px;
@@ -234,7 +232,6 @@ body {
     border-right: none;
 }
 
-/* The chart area: fixed height, bars grow up from the bottom */
 .bar-v-chart {
     position: relative;
     height: 160px;
@@ -243,7 +240,6 @@ body {
     gap: 6px;
 }
 
-/* Budget dashed line — positioned from bottom as % */
 .bar-v-budget-line {
     position: absolute;
     left: 0;
@@ -265,7 +261,6 @@ body {
     padding: 0 2px;
 }
 
-/* Each column (prev / this month) */
 .bar-v-col {
     flex: 1;
     display: flex;
@@ -277,7 +272,6 @@ body {
     z-index: 2;
 }
 
-/* Dollar amount shown above the bar */
 .bar-v-amount {
     font-family: var(--mono);
     font-size: 10px;
@@ -297,11 +291,9 @@ body {
     color: var(--muted2);
 }
 
-/* The bar itself: fixed-height container, bar grows from bottom */
 .bar-v-bar-wrap {
     width: 100%;
     height: 120px;
-    /* inner bar area — amounts sit above this */
     display: flex;
     align-items: flex-end;
     border-radius: 3px 3px 0 0;
@@ -330,7 +322,24 @@ body {
     background: var(--surface3);
 }
 
-/* X-axis label below the chart */
+/* Clickable bars */
+.clickable-bar {
+    cursor: pointer;
+    transition: height .45s cubic-bezier(.4, 0, .2, 1), filter .15s, opacity .15s;
+}
+
+.clickable-bar:hover {
+    filter: brightness(1.25);
+    opacity: 0.92;
+}
+
+/* Zero-height bars still need to be clickable — give them a minimum hit area */
+.clickable-bar[style*="height:0%"],
+.clickable-bar[style*="height: 0%"] {
+    min-height: 4px;
+    opacity: 0.3;
+}
+
 .bar-v-xlabel {
     padding: 10px 0 14px;
     display: flex;
@@ -380,6 +389,16 @@ body {
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 14px 16px;
+}
+
+.number-cell.clickable-tile {
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.number-cell.clickable-tile:hover {
+    border-color: var(--border2);
+    background: var(--surface3);
 }
 
 .number-cell .cat-label {
@@ -458,4 +477,199 @@ body {
     font-family: var(--mono);
     font-size: 12px;
     color: var(--muted);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TRANSACTION MODAL
+   ══════════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    transition: background .2s;
+}
+
+.modal-overlay.open {
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.modal-panel {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(12px);
+    opacity: 0;
+    transition: transform .2s cubic-bezier(.4, 0, .2, 1), opacity .2s;
+    overflow: hidden;
+}
+
+.modal-overlay.open .modal-panel {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.modal-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.modal-category {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: .04em;
+}
+
+.modal-month {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted2);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--muted2);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color .12s, background .12s;
+}
+
+.modal-close:hover {
+    color: var(--text);
+    background: var(--border2);
+}
+
+.modal-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0;
+}
+
+.modal-loading,
+.modal-empty,
+.modal-error {
+    padding: 40px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted2);
+}
+
+.modal-error {
+    color: var(--red);
+}
+
+/* ── Modal table ── */
+.modal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+.modal-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted2);
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-table thead th:last-child {
+    text-align: right;
+}
+
+.modal-table tbody tr {
+    transition: background .08s;
+}
+
+.modal-table tbody tr:hover {
+    background: rgba(255, 255, 255, .025);
+}
+
+.modal-table tbody td {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.tx-date {
+    color: var(--muted2);
+    white-space: nowrap;
+    width: 90px;
+}
+
+.tx-merchant {
+    color: var(--text);
+    max-width: 300px;
+}
+
+.tx-amount {
+    text-align: right;
+    color: var(--red);
+    white-space: nowrap;
+}
+
+/* Footer total row */
+.modal-table tfoot td {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border2);
+    background: var(--surface2);
+}
+
+.tx-total-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted2);
+}
+
+.tx-total-amount {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.tx-amount.credit {
+    color: var(--accent);
+}
+
+.tx-total-amount.credit {
+    color: var(--accent);
 }

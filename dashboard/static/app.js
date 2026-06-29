@@ -30,16 +30,136 @@ function monthLabel(ym) {
 async function fetchData(ym) {
   const r = await fetch(`/api/dashboard?month=${encodeURIComponent(ym)}`);
   const data = await r.json();
-  if (!r.ok) {
-    console.error('API error:', data);
-    throw new Error(data.error || 'API error');
-  }
+  if (!r.ok) throw new Error(data.error || 'API error');
   return data;
 }
 
 async function fetchMonths() {
   const r = await fetch('/api/months');
   return r.json();
+}
+
+async function fetchCategoryTransactions(ym, category) {
+  const r = await fetch(
+    `/api/category_transactions?month=${encodeURIComponent(ym)}&category=${encodeURIComponent(category)}`
+  );
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════════════════════════════
+
+function openTransactionModal(ym, category) {
+  // Remove any existing modal
+  document.getElementById('tx-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tx-modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-category">${category}</span>
+          <span class="modal-month">${monthLabel(ym)}</span>
+        </div>
+        <button class="modal-close" id="modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="modal-loading">loading…</div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Close on backdrop click or × button
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+
+  // Close on Escape
+  const onKey = (e) => { if (e.key === 'Escape') closeModal(); };
+  document.addEventListener('keydown', onKey);
+  overlay._onKey = onKey;
+
+  // Trigger animation
+  requestAnimationFrame(() => overlay.classList.add('open'));
+
+  // Fetch and render
+  fetchCategoryTransactions(ym, category)
+    .then(data => renderModalBody(data))
+    .catch(err => {
+      document.getElementById('modal-body').innerHTML =
+        `<div class="modal-error">Failed to load: ${err.message}</div>`;
+    });
+}
+
+function closeModal() {
+  const overlay = document.getElementById('tx-modal');
+  if (!overlay) return;
+  document.removeEventListener('keydown', overlay._onKey);
+  overlay.classList.remove('open');
+  overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+}
+
+function renderModalBody(data) {
+  const body = document.getElementById('modal-body');
+  if (!body) return;
+
+  const txs = data.transactions || [];
+  if (!txs.length) {
+    body.innerHTML = `<div class="modal-empty">No transactions for this category.</div>`;
+    return;
+  }
+
+  const net = txs.reduce((sum, t) => sum + t.amount, 0);
+  const isNetCredit = net > 0;
+
+  const rows = txs.map(t => {
+    const label = t.merchant || t.description || '—';
+    const shortLabel = label.length > 42 ? label.slice(0, 42) + '…' : label;
+    const isCredit = t.amount > 0;
+    const amtCls = isCredit ? 'tx-amount credit' : 'tx-amount';
+    const amtStr = isCredit ? `+${fmtDec(t.amount)}` : fmtDec(Math.abs(t.amount));
+    return `
+      <tr>
+        <td class="tx-date">${t.date}</td>
+        <td class="tx-merchant" title="${esc(label)}">${esc(shortLabel)}</td>
+        <td class="${amtCls}">${amtStr}</td>
+      </tr>`;
+  }).join('');
+
+  const netLabel = isNetCredit ? 'Net (credit)' : 'Net';
+  const netAmtCls = isNetCredit ? 'tx-total-amount credit' : 'tx-total-amount';
+  const netAmtStr = isNetCredit ? `+${fmtDec(net)}` : fmtDec(Math.abs(net));
+
+  body.innerHTML = `
+    <table class="modal-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Merchant / Description</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" class="tx-total-label">${netLabel}</td>
+          <td class="${netAmtCls}">${netAmtStr}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -72,10 +192,10 @@ function renderSummary(data) {
 
 // ══════════════════════════════════════════════════════════════════
 // VERTICAL BAR CHART — shared renderer
-// hasBudget: whether to draw budget lines
 // ══════════════════════════════════════════════════════════════════
 
-function renderVerticalBars(sec, prevLabel, hasBudget) {
+function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
+  const prevLabel = monthLabel(prevYm);
   const cats = sec.categories;
 
   const groups = cats.map(cat => {
@@ -108,34 +228,43 @@ function renderVerticalBars(sec, prevLabel, hasBudget) {
     }
 
     const budgetLine = budgetPct !== null ? `
-            <div class="bar-v-budget-line" style="bottom:${budgetPct}%">
-                <span class="bar-v-budget-label">${fmt(budget)}</span>
-            </div>` : '';
+      <div class="bar-v-budget-line" style="bottom:${budgetPct}%">
+        <span class="bar-v-budget-label">${fmt(budget)}</span>
+      </div>` : '';
 
+    // data attributes carry what to open on click
     return `
-        <div class="bar-v-group">
-          <div class="bar-v-chart">
-            ${budgetLine}
-            <!-- prev bar -->
-            <div class="bar-v-col prev-col">
-              <div class="bar-v-amount prev-amt">${fmt(cat.prev)}</div>
-              <div class="bar-v-bar-wrap">
-                <div class="bar-v-fill prev" style="height:${prevH}%"></div>
-              </div>
-            </div>
-            <!-- this month bar -->
-            <div class="bar-v-col this-col">
-              <div class="bar-v-amount this-amt">${fmtDec(cat.amount)}</div>
-              <div class="bar-v-bar-wrap">
-                <div class="${barCls}" style="height:${thisH}%"></div>
-              </div>
+      <div class="bar-v-group">
+        <div class="bar-v-chart">
+          ${budgetLine}
+          <!-- prev bar -->
+          <div class="bar-v-col prev-col">
+            <div class="bar-v-amount prev-amt">${fmt(cat.prev)}</div>
+            <div class="bar-v-bar-wrap">
+              <div class="bar-v-fill prev clickable-bar"
+                   style="height:${prevH}%"
+                   data-ym="${prevYm}"
+                   data-category="${esc(cat.name)}"
+                   title="${esc(cat.name)} · ${monthLabel(prevYm)}"></div>
             </div>
           </div>
-          <div class="bar-v-xlabel">
-            <span class="bar-v-catname">${cat.name}</span>
-            ${diffLabel}
+          <!-- this month bar -->
+          <div class="bar-v-col this-col">
+            <div class="bar-v-amount this-amt">${fmtDec(cat.amount)}</div>
+            <div class="bar-v-bar-wrap">
+              <div class="${barCls} clickable-bar"
+                   style="height:${thisH}%"
+                   data-ym="${currentYm}"
+                   data-category="${esc(cat.name)}"
+                   title="${esc(cat.name)} · ${monthLabel(currentYm)}"></div>
+            </div>
           </div>
-        </div>`;
+        </div>
+        <div class="bar-v-xlabel">
+          <span class="bar-v-catname">${cat.name}</span>
+          ${diffLabel}
+        </div>
+      </div>`;
   }).join('');
 
   const subtitle = hasBudget ? `budgeted · vs ${prevLabel}` : `vs ${prevLabel}`;
@@ -157,34 +286,31 @@ function renderVerticalBars(sec, prevLabel, hasBudget) {
     </div>`;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// RENDER — BAR WITH BUDGET
-// ══════════════════════════════════════════════════════════════════
-
-function renderBarWithBudget(sec, prevLabel) {
-  return renderVerticalBars(sec, prevLabel, true);
+function renderBarWithBudget(sec, currentYm, prevYm) {
+  return renderVerticalBars(sec, currentYm, prevYm, true);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// RENDER — BAR COMPARISON
-// ══════════════════════════════════════════════════════════════════
-
-function renderBarComparison(sec, prevLabel) {
-  return renderVerticalBars(sec, prevLabel, false);
+function renderBarComparison(sec, currentYm, prevYm) {
+  return renderVerticalBars(sec, currentYm, prevYm, false);
 }
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — NUMBERS
 // ══════════════════════════════════════════════════════════════════
 
-function renderNumbers(sec, prevLabel) {
+function renderNumbers(sec, currentYm, prevYm) {
+  const prevLabel = monthLabel(prevYm);
   const cells = sec.categories.map(cat => {
     const prevStr = cat.prev
       ? `<span class="num-prev-val">${fmtDec(cat.prev)}</span> <span class="num-prev-label">prev</span>`
       : `<span class="num-prev-label">no prior data</span>`;
 
     return `
-      <div class="number-cell">
+      <div class="number-cell clickable-tile"
+           data-ym="${currentYm}"
+           data-category="${esc(cat.name)}"
+           data-prev-ym="${prevYm}"
+           title="Click to see transactions">
         <div class="cat-label">${cat.name}</div>
         <div class="cat-value">${fmtDec(cat.amount)}</div>
         <div class="cat-prev">${prevStr}</div>
@@ -204,18 +330,38 @@ function renderNumbers(sec, prevLabel) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// RENDER — DASHBOARD
+// RENDER — DASHBOARD + EVENT DELEGATION
 // ══════════════════════════════════════════════════════════════════
 
 function renderDashboard(data) {
-  const prevLabel = monthLabel(data.prev_month);
+  const currentYm = data.month;
+  const prevYm = data.prev_month;
+
   const sections = data.sections.map(sec => {
-    if (sec.display === 'bar_with_budget') return renderBarWithBudget(sec, prevLabel);
-    if (sec.display === 'number') return renderNumbers(sec, prevLabel);
-    return renderBarComparison(sec, prevLabel);
+    if (sec.display === 'bar_with_budget') return renderBarWithBudget(sec, currentYm, prevYm);
+    if (sec.display === 'number') return renderNumbers(sec, currentYm, prevYm);
+    return renderBarComparison(sec, currentYm, prevYm);
   }).join('');
 
-  document.getElementById('page').innerHTML = renderSummary(data) + sections;
+  const page = document.getElementById('page');
+  page.innerHTML = renderSummary(data) + sections;
+
+  // Single delegated listener for all bars and number tiles
+  page.addEventListener('click', (e) => {
+    const bar = e.target.closest('.clickable-bar');
+    const tile = e.target.closest('.clickable-tile');
+
+    if (bar) {
+      const ym = bar.dataset.ym;
+      const cat = bar.dataset.category;
+      if (ym && cat) openTransactionModal(ym, cat);
+    } else if (tile) {
+      // Number tiles: current month on primary area; could add prev later
+      const ym = tile.dataset.ym;
+      const cat = tile.dataset.category;
+      if (ym && cat) openTransactionModal(ym, cat);
+    }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════

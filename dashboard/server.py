@@ -23,7 +23,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from config import DB_PATH
-from dashboard.data import load_config, fetch_dashboard_data, available_months
+from dashboard.data import (
+    load_config, fetch_dashboard_data, available_months,
+    fetch_transactions_for_category,
+)
 
 STATIC_DIR = _HERE / "static"
 
@@ -75,6 +78,15 @@ class Handler(BaseHTTPRequestHandler):
                 cfg  = load_config()
                 data = fetch_dashboard_data(ym, cfg)
                 self.send_json(data)
+
+            elif path == "/api/category_transactions":
+                ym       = params.get("month",    [None])[0] or ""
+                category = params.get("category", [None])[0] or ""
+                if not ym or not category:
+                    self.send_json({"error": "month and category required"}, 400)
+                    return
+                rows = fetch_transactions_for_category(ym, category)
+                self.send_json({"month": ym, "category": category, "transactions": rows})
 
             # ── Static files ─────────────────────────────────────
             elif path == "/" or path == "":

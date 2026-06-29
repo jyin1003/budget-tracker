@@ -74,4 +74,4 @@ When an unknown merchant is encountered you'll be prompted to:
 The mapping is saved permanently — the same raw description will be auto-resolved in all future runs.
 
 ## To Do
-- dashboard shows analytics of monthly breakdown and YTD. 
+- fix header numbers

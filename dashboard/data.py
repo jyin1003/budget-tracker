@@ -32,11 +32,9 @@ def _load_toml(path: Path) -> dict:
 
 def _strip_comment(s: str) -> str:
     """Strip trailing inline comment from a value string, respecting quoted strings."""
-    # If inside a string, don't strip
     s = s.strip()
     if s.startswith('"') or s.startswith("'"):
         return s
-    # Strip trailing # comment (only if preceded by whitespace)
     return re.sub(r'\s+#.*$', '', s).strip()
 
 
@@ -75,14 +73,10 @@ def _parse_toml_minimal(text: str) -> dict:
         key = key.strip()
         val = val.strip()
 
-        # Strip inline comment before any value parsing
-        # But only outside of quoted strings and arrays
-        # For arrays, strip comment after the closing bracket
         if val.startswith("["):
-            # Find the closing bracket first, then strip comment after it
             bracket_end = val.rfind("]")
             if bracket_end != -1:
-                val = val[:bracket_end + 1]  # keep only up to and including ]
+                val = val[:bracket_end + 1]
             items = [v.strip().strip('"').strip("'") for v in val.strip("[]").split(",") if v.strip()]
             converted = []
             for item in items:
@@ -96,7 +90,6 @@ def _parse_toml_minimal(text: str) -> dict:
         elif val.lower() in ("true", "false"):
             parsed = val.lower() == "true"
         else:
-            # Strip inline comment for scalar values
             val = _strip_comment(val)
             try:
                 parsed = int(val)
@@ -190,22 +183,26 @@ def prev_month(ym: str) -> str:
 
 
 def fetch_spending(ym: str, cfg: DashboardConfig) -> dict[str, float]:
+    """Net spend per category: gross expenses minus any credits in the same category.
+    Excludes income/transfer categories via cfg.excluded_cats.
+    Returns positive float = net outflow (never negative; floored at 0)."""
     start, end = month_range(ym)
     excl = [c.lower() for c in cfg.excluded_cats]
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT c.name as category, SUM(ABS(t.amount)) as total
+            SELECT
+                c.name as category,
+                SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END) as gross_spend,
+                SUM(CASE WHEN t.amount > 0 THEN t.amount      ELSE 0 END) as credits
             FROM transactions t
             LEFT JOIN categories c ON c.id = t.category_id
-            LEFT JOIN accounts a   ON a.id = t.account_id
             WHERE t.date >= ? AND t.date <= ?
-              AND t.amount < 0
               AND c.name IS NOT NULL
             GROUP BY c.id
             ORDER BY c.name
         """, (start, end)).fetchall()
     return {
-        r["category"]: round(r["total"] or 0, 2)
+        r["category"]: round(max((r["gross_spend"] or 0) - (r["credits"] or 0), 0), 2)
         for r in rows
         if r["category"] and r["category"].lower() not in excl
     }
@@ -227,6 +224,27 @@ def fetch_income(ym: str, cfg: DashboardConfig) -> float:
               AND a.name IN ({placeholders})
         """, [start, end] + accounts).fetchone()
     return round(float(row["total"]), 2)
+
+
+def fetch_transactions_for_category(ym: str, category: str) -> list[dict]:
+    """Return all transactions for a given month and category (expenses and credits),
+    sorted ascending by date then amount. Total is net (credits offset expenses)."""
+    start, end = month_range(ym)
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                t.date,
+                t.amount,
+                t.description,
+                m.name AS merchant
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id
+            LEFT JOIN merchants  m ON m.id = t.merchant_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND c.name = ?
+            ORDER BY t.date ASC, t.amount ASC
+        """, (start, end, category)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def fetch_dashboard_data(ym: str, cfg: DashboardConfig) -> dict:
