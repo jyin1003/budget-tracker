@@ -30,6 +30,16 @@ def _load_toml(path: Path) -> dict:
     return _parse_toml_minimal(path.read_text())
 
 
+def _strip_comment(s: str) -> str:
+    """Strip trailing inline comment from a value string, respecting quoted strings."""
+    # If inside a string, don't strip
+    s = s.strip()
+    if s.startswith('"') or s.startswith("'"):
+        return s
+    # Strip trailing # comment (only if preceded by whitespace)
+    return re.sub(r'\s+#.*$', '', s).strip()
+
+
 def _parse_toml_minimal(text: str) -> dict:
     result: dict = {}
     current_section: list[str] = []
@@ -39,7 +49,6 @@ def _parse_toml_minimal(text: str) -> dict:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        line = re.sub(r'\s+#.*$', '', line).strip()
 
         m = re.match(r'^\[\[([^\]]+)\]\]$', line)
         if m:
@@ -66,9 +75,14 @@ def _parse_toml_minimal(text: str) -> dict:
         key = key.strip()
         val = val.strip()
 
-        if val.startswith('"') or val.startswith("'"):
-            parsed = val.strip('"').strip("'")
-        elif val.startswith("["):
+        # Strip inline comment before any value parsing
+        # But only outside of quoted strings and arrays
+        # For arrays, strip comment after the closing bracket
+        if val.startswith("["):
+            # Find the closing bracket first, then strip comment after it
+            bracket_end = val.rfind("]")
+            if bracket_end != -1:
+                val = val[:bracket_end + 1]  # keep only up to and including ]
             items = [v.strip().strip('"').strip("'") for v in val.strip("[]").split(",") if v.strip()]
             converted = []
             for item in items:
@@ -77,9 +91,13 @@ def _parse_toml_minimal(text: str) -> dict:
                 except ValueError:
                     converted.append(item)
             parsed = converted
+        elif val.startswith('"') or val.startswith("'"):
+            parsed = val.strip('"').strip("'")
         elif val.lower() in ("true", "false"):
             parsed = val.lower() == "true"
         else:
+            # Strip inline comment for scalar values
+            val = _strip_comment(val)
             try:
                 parsed = int(val)
             except ValueError:

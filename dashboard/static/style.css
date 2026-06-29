@@ -12,6 +12,7 @@
     --bg: #0d0f12;
     --surface: #13161b;
     --surface2: #181c22;
+    --surface3: #252b34;
     --border: #1e2228;
     --border2: #252b34;
     --text: #c8d0dc;
@@ -196,126 +197,171 @@ body {
 }
 
 .section-body {
-    padding: 16px 20px;
+    padding: 20px 24px 16px;
     display: flex;
     flex-direction: column;
     gap: 14px;
 }
 
-/* ── Bar rows ── */
-.bar-row {
+/* ── Vertical bar chart ── */
+
+/* Section body overide for bar layout */
+.section-body.bar-v-section {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0;
+    padding: 24px 24px 0;
+    overflow-x: auto;
+}
+
+/* One group = one category: two bars side by side */
+.bar-v-group {
+    flex: 1;
+    min-width: 80px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    align-items: stretch;
+    border-right: 1px solid var(--border);
+    padding: 0 12px;
 }
 
-.bar-row-labels {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
+.bar-v-group:first-child {
+    padding-left: 0;
 }
 
-.bar-cat-name {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
+.bar-v-group:last-child {
+    padding-right: 0;
+    border-right: none;
 }
 
-.bar-amounts {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted2);
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-}
-
-.bar-amounts .this-month {
-    color: var(--text);
-    font-weight: 500;
-}
-
-.bar-amounts .prev-month {
-    color: var(--muted2);
-    font-size: 10px;
-}
-
-.bar-amounts .budget-lbl {
-    color: var(--muted);
-    font-size: 10px;
-}
-
-.bar-amounts .over {
-    color: var(--red);
-}
-
-.bar-track {
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
+/* The chart area: fixed height, bars grow up from the bottom */
+.bar-v-chart {
     position: relative;
-    overflow: visible;
+    height: 160px;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
 }
 
-.bar-fill {
+/* Budget dashed line — positioned from bottom as % */
+.bar-v-budget-line {
     position: absolute;
     left: 0;
-    top: 0;
+    right: 0;
+    border-top: 1px dashed var(--muted2);
+    z-index: 4;
+    pointer-events: none;
+}
+
+.bar-v-budget-label {
+    position: absolute;
+    right: 0;
+    top: -16px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted2);
+    white-space: nowrap;
+    background: var(--surface);
+    padding: 0 2px;
+}
+
+/* Each column (prev / this month) */
+.bar-v-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
     height: 100%;
-    border-radius: 4px;
-    transition: width .4s cubic-bezier(.4, 0, .2, 1);
+    position: relative;
     z-index: 2;
 }
 
-.bar-fill.normal {
+/* Dollar amount shown above the bar */
+.bar-v-amount {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.bar-v-amount.this-amt {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.bar-v-amount.prev-amt {
+    color: var(--muted2);
+}
+
+/* The bar itself: fixed-height container, bar grows from bottom */
+.bar-v-bar-wrap {
+    width: 100%;
+    height: 120px;
+    /* inner bar area — amounts sit above this */
+    display: flex;
+    align-items: flex-end;
+    border-radius: 3px 3px 0 0;
+    overflow: hidden;
+}
+
+.bar-v-fill {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    transition: height .45s cubic-bezier(.4, 0, .2, 1);
+}
+
+.bar-v-fill.normal {
     background: var(--accent);
 }
 
-.bar-fill.warning {
+.bar-v-fill.warning {
     background: var(--yellow);
 }
 
-.bar-fill.over {
+.bar-v-fill.over {
     background: var(--red);
 }
 
-.bar-prev {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    border-radius: 4px;
-    background: var(--border2);
-    z-index: 1;
-    transition: width .4s cubic-bezier(.4, 0, .2, 1);
+.bar-v-fill.prev {
+    background: var(--surface3);
 }
 
-.bar-budget-marker {
-    position: absolute;
-    top: -3px;
-    width: 2px;
-    height: calc(100% + 6px);
-    background: var(--muted2);
-    border-radius: 1px;
-    z-index: 3;
+/* X-axis label below the chart */
+.bar-v-xlabel {
+    padding: 10px 0 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    border-top: 1px solid var(--border);
+    margin-top: 0;
 }
 
-.bar-unused {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background: var(--accent-dim);
-    border-radius: 0 4px 4px 0;
-    z-index: 1;
+.bar-v-catname {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
 }
 
-.bar-over-ext {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background: var(--red-dim);
-    border-radius: 0 4px 4px 0;
-    z-index: 1;
+.bar-v-pct {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-align: center;
+}
+
+.bar-v-pct.up {
+    color: var(--red);
+}
+
+.bar-v-pct.down {
+    color: var(--accent);
 }
 
 /* ── Number cells ── */
@@ -356,12 +402,12 @@ body {
     margin-top: 6px;
 }
 
-.number-cell .cat-prev .up {
-    color: var(--red);
+.num-prev-val {
+    color: var(--muted2);
 }
 
-.number-cell .cat-prev .down {
-    color: var(--accent);
+.num-prev-label {
+    color: var(--muted);
 }
 
 /* ── Legend ── */

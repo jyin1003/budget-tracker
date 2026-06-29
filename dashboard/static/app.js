@@ -6,47 +6,50 @@ const fmt = (n) => '$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDi
 const fmtDec = (n) => '$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function deltaHtml(current, prev, invertColour = false) {
-    if (!prev) return `<span class="flat">no prior data</span>`;
-    const diff = current - prev;
-    const pct = Math.round(Math.abs(diff / prev) * 100);
-    if (Math.abs(diff) < 0.5) return `<span class="flat">same as last month</span>`;
-    const isUp = diff > 0;
-    const cls = invertColour ? (isUp ? 'down' : 'up') : (isUp ? 'up' : 'down');
-    const arrow = isUp ? '↑' : '↓';
-    return `<span class="${cls}">${arrow}${pct}% vs last month (${fmt(prev)})</span>`;
+  if (!prev) return `<span class="flat">no prior data</span>`;
+  const diff = current - prev;
+  const pct = Math.round(Math.abs(diff / prev) * 100);
+  if (Math.abs(diff) < 0.5) return `<span class="flat">same as last month</span>`;
+  const isUp = diff > 0;
+  const cls = invertColour ? (isUp ? 'down' : 'up') : (isUp ? 'up' : 'down');
+  const arrow = isUp ? '↑' : '↓';
+  return `<span class="${cls}">${arrow}${pct}% vs last month (${fmt(prev)})</span>`;
 }
 
 function monthLabel(ym) {
-    if (!ym) return '';
-    const [y, m] = ym.split('-').map(Number);
-    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${names[m - 1]} ${y}`;
+  if (!ym) return '';
+  const [y, m] = ym.split('-').map(Number);
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${names[m - 1]} ${y}`;
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // DATA
 // ══════════════════════════════════════════════════════════════════
 
 async function fetchData(ym) {
-    const r = await fetch(`/api/dashboard?month=${encodeURIComponent(ym)}`);
-    return r.json();
+  const r = await fetch(`/api/dashboard?month=${encodeURIComponent(ym)}`);
+  const data = await r.json();
+  if (!r.ok) {
+    console.error('API error:', data);
+    throw new Error(data.error || 'API error');
+  }
+  return data;
 }
 
 async function fetchMonths() {
-    const r = await fetch('/api/months');
-    return r.json();
+  const r = await fetch('/api/months');
+  return r.json();
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — SUMMARY
 // ══════════════════════════════════════════════════════════════════
 
 function renderSummary(data) {
-    const net = data.income - data.total_spend;
-    const netCls = net >= 0 ? 'income' : 'expense';
-    return `
+  const net = data.income - data.total_spend;
+  const netCls = net >= 0 ? 'income' : 'expense';
+  return `
     <div class="summary-strip">
       <div class="summary-card">
         <div class="label">Income</div>
@@ -67,146 +70,127 @@ function renderSummary(data) {
   `;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// VERTICAL BAR CHART — shared renderer
+// hasBudget: whether to draw budget lines
+// ══════════════════════════════════════════════════════════════════
+
+function renderVerticalBars(sec, prevLabel, hasBudget) {
+  const cats = sec.categories;
+
+  // Each category gets its own scale so bars are always readable
+  // Chart height in px (CSS drives actual rendering via % heights)
+  const CHART_H = 160; // px — used for label positioning only
+
+  const groups = cats.map(cat => {
+    const budget = hasBudget ? (cat.budget || 0) : 0;
+    const scaleMax = Math.max(cat.amount, cat.prev, budget, 1);
+
+    const thisH = (cat.amount / scaleMax) * 100;
+    const prevH = (cat.prev / scaleMax) * 100;
+
+    const isOver = budget && cat.amount > budget;
+    const isWarn = budget && cat.amount > budget * 0.8 && !isOver;
+    const barCls = isOver ? 'bar-v-fill over' : isWarn ? 'bar-v-fill warning' : 'bar-v-fill normal';
+
+    // Budget marker as % of scale
+    const budgetPct = budget ? (budget / scaleMax) * 100 : null;
+
+    // % change label
+    const diff = cat.amount - cat.prev;
+    const pct = cat.prev ? Math.round(Math.abs(diff / cat.prev) * 100) : null;
+    let diffLabel = '';
+    if (pct !== null && Math.abs(diff) > 0.5) {
+      const cls = diff > 0 ? 'up' : 'down';
+      const arrow = diff > 0 ? '↑' : '↓';
+      diffLabel = `<span class="bar-v-pct ${cls}">${arrow}${pct}%</span>`;
+    }
+
+    const budgetLine = budgetPct !== null ? `
+            <div class="bar-v-budget-line" style="bottom:${budgetPct}%">
+                <span class="bar-v-budget-label">${fmt(budget)}</span>
+            </div>` : '';
+
+    return `
+        <div class="bar-v-group">
+          <div class="bar-v-chart">
+            ${budgetLine}
+            <!-- prev bar -->
+            <div class="bar-v-col prev-col">
+              <div class="bar-v-amount prev-amt">${fmt(cat.prev)}</div>
+              <div class="bar-v-bar-wrap">
+                <div class="bar-v-fill prev" style="height:${prevH}%"></div>
+              </div>
+            </div>
+            <!-- this month bar -->
+            <div class="bar-v-col this-col">
+              <div class="bar-v-amount this-amt">${fmtDec(cat.amount)}</div>
+              <div class="bar-v-bar-wrap">
+                <div class="${barCls}" style="height:${thisH}%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bar-v-xlabel">
+            <span class="bar-v-catname">${cat.name}</span>
+            ${diffLabel}
+          </div>
+        </div>`;
+  }).join('');
+
+  const subtitle = hasBudget ? `budgeted · vs ${prevLabel}` : `vs ${prevLabel}`;
+
+  return `
+    <div class="section-card">
+      <div class="section-header">
+        <span class="section-title">${sec.name}</span>
+        <span class="section-subtitle">${subtitle}</span>
+      </div>
+      <div class="section-body bar-v-section">
+        ${groups}
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>this month</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--surface3)"></div>${prevLabel}</div>
+        ${hasBudget ? `<div class="legend-item"><div class="legend-dot" style="background:var(--muted2);height:2px;width:14px;border-radius:0"></div>budget</div>` : ''}
+      </div>
+    </div>`;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — BAR WITH BUDGET
 // ══════════════════════════════════════════════════════════════════
 
 function renderBarWithBudget(sec, prevLabel) {
-    const maxVal = Math.max(
-        ...sec.categories.map(c => Math.max(c.amount, c.prev, c.budget || 0)),
-        1
-    );
-
-    const rows = sec.categories.map(cat => {
-        const budget = cat.budget || 0;
-        const isOver = budget && cat.amount > budget;
-        const isWarn = budget && cat.amount > budget * 0.8 && !isOver;
-        const fillCls = isOver ? 'over' : isWarn ? 'warning' : 'normal';
-
-        const fillW = budget ? (Math.min(cat.amount, budget) / budget) * 100 : (cat.amount / maxVal) * 100;
-        const prevW = budget ? (Math.min(cat.prev, budget) / budget) * 100 : (cat.prev / maxVal) * 100;
-        const unusedW = budget && !isOver ? (100 - fillW) : 0;
-        const overW = isOver ? ((cat.amount - budget) / budget) * 100 : 0;
-
-        const overText = isOver ? `<span class="over">+${fmt(cat.amount - budget)} over</span>` : '';
-        const budgetText = budget ? `<span class="budget-lbl">budget ${fmt(budget)}</span>` : '';
-
-        return `
-      <div class="bar-row">
-        <div class="bar-row-labels">
-          <span class="bar-cat-name">${cat.name}</span>
-          <div class="bar-amounts">
-            ${overText}
-            <span class="this-month">${fmtDec(cat.amount)}</span>
-            <span class="prev-month">${fmtDec(cat.prev)} prev</span>
-            ${budgetText}
-          </div>
-        </div>
-        <div class="bar-track">
-          ${unusedW > 0 ? `<div class="bar-unused" style="left:${fillW}%;width:${unusedW}%"></div>` : ''}
-          ${overW > 0 ? `<div class="bar-over-ext" style="left:100%;width:${overW}%"></div>` : ''}
-          <div class="bar-prev" style="width:${prevW}%"></div>
-          <div class="bar-fill ${fillCls}" style="width:${fillW + (isOver ? overW : 0)}%"></div>
-          ${budget > 0 ? `<div class="bar-budget-marker" style="left:100%"></div>` : ''}
-        </div>
-      </div>
-    `;
-    }).join('');
-
-    return `
-    <div class="section-card">
-      <div class="section-header">
-        <span class="section-title">${sec.name}</span>
-        <span class="section-subtitle">budgeted · vs ${prevLabel}</span>
-      </div>
-      <div class="section-body">${rows}</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>this month</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--border2)"></div>last month</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--accent-dim)"></div>unused budget</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--red-dim)"></div>over budget</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--muted2);width:2px"></div>budget limit</div>
-      </div>
-    </div>
-  `;
+  return renderVerticalBars(sec, prevLabel, true);
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — BAR COMPARISON
 // ══════════════════════════════════════════════════════════════════
 
 function renderBarComparison(sec, prevLabel) {
-    const maxVal = Math.max(...sec.categories.map(c => Math.max(c.amount, c.prev)), 1);
-
-    const rows = sec.categories.map(cat => {
-        const fillW = (cat.amount / maxVal) * 100;
-        const prevW = (cat.prev / maxVal) * 100;
-        const diff = cat.amount - cat.prev;
-        const pct = cat.prev ? Math.round(Math.abs(diff / cat.prev) * 100) : null;
-        const diffCls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
-        const diffText = cat.prev && Math.abs(diff) > 0.5
-            ? `<span class="${diffCls}">${diff > 0 ? '↑' : '↓'}${pct}%</span>`
-            : '';
-
-        return `
-      <div class="bar-row">
-        <div class="bar-row-labels">
-          <span class="bar-cat-name">${cat.name}</span>
-          <div class="bar-amounts">
-            ${diffText}
-            <span class="this-month">${fmtDec(cat.amount)}</span>
-            <span class="prev-month">${fmtDec(cat.prev)} prev</span>
-          </div>
-        </div>
-        <div class="bar-track">
-          <div class="bar-prev" style="width:${prevW}%"></div>
-          <div class="bar-fill normal" style="width:${fillW}%"></div>
-        </div>
-      </div>
-    `;
-    }).join('');
-
-    return `
-    <div class="section-card">
-      <div class="section-header">
-        <span class="section-title">${sec.name}</span>
-        <span class="section-subtitle">vs ${prevLabel}</span>
-      </div>
-      <div class="section-body">${rows}</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>this month</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--border2)"></div>last month</div>
-      </div>
-    </div>
-  `;
+  return renderVerticalBars(sec, prevLabel, false);
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — NUMBERS
 // ══════════════════════════════════════════════════════════════════
 
 function renderNumbers(sec, prevLabel) {
-    const cells = sec.categories.map(cat => {
-        const diff = cat.amount - cat.prev;
-        const pct = cat.prev ? Math.round(Math.abs(diff / cat.prev) * 100) : null;
-        const cls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
-        const diffStr = cat.prev && Math.abs(diff) > 0.5
-            ? `<span class="${cls}">${diff > 0 ? '↑' : '↓'}${pct}%</span> vs ${fmtDec(cat.prev)}`
-            : cat.prev ? 'same as last month' : 'no prior data';
+  const cells = sec.categories.map(cat => {
+    const prevStr = cat.prev
+      ? `<span class="num-prev-val">${fmtDec(cat.prev)}</span> <span class="num-prev-label">prev</span>`
+      : `<span class="num-prev-label">no prior data</span>`;
 
-        return `
+    return `
       <div class="number-cell">
         <div class="cat-label">${cat.name}</div>
         <div class="cat-value">${fmtDec(cat.amount)}</div>
-        <div class="cat-prev">${diffStr}</div>
-      </div>
-    `;
-    }).join('');
+        <div class="cat-prev">${prevStr}</div>
+      </div>`;
+  }).join('');
 
-    return `
+  return `
     <div class="section-card">
       <div class="section-header">
         <span class="section-title">${sec.name}</span>
@@ -215,59 +199,66 @@ function renderNumbers(sec, prevLabel) {
       <div class="section-body">
         <div class="number-grid">${cells}</div>
       </div>
-    </div>
-  `;
+    </div>`;
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // RENDER — DASHBOARD
 // ══════════════════════════════════════════════════════════════════
 
 function renderDashboard(data) {
-    const prevLabel = monthLabel(data.prev_month);
-    const sections = data.sections.map(sec => {
-        if (sec.display === 'bar_with_budget') return renderBarWithBudget(sec, prevLabel);
-        if (sec.display === 'number') return renderNumbers(sec, prevLabel);
-        return renderBarComparison(sec, prevLabel);
-    }).join('');
+  const prevLabel = monthLabel(data.prev_month);
+  const sections = data.sections.map(sec => {
+    if (sec.display === 'bar_with_budget') return renderBarWithBudget(sec, prevLabel);
+    if (sec.display === 'number') return renderNumbers(sec, prevLabel);
+    return renderBarComparison(sec, prevLabel);
+  }).join('');
 
-    document.getElementById('page').innerHTML = renderSummary(data) + sections;
+  document.getElementById('page').innerHTML = renderSummary(data) + sections;
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════════════════════════════
 
 async function loadMonth(ym) {
-    document.getElementById('page').innerHTML = '<div class="loading-screen">loading…</div>';
+  document.getElementById('page').innerHTML = '<div class="loading-screen">loading…</div>';
+  try {
     const data = await fetchData(ym);
+    if (!data || !data.sections) {
+      document.getElementById('page').innerHTML =
+        `<div class="empty-state">API returned unexpected data.<br><pre style="font-size:10px;margin-top:8px;color:var(--muted)">${JSON.stringify(data, null, 2)}</pre></div>`;
+      return;
+    }
     renderDashboard(data);
+  } catch (e) {
+    document.getElementById('page').innerHTML =
+      `<div class="empty-state">Error loading dashboard:<br><pre style="font-size:10px;margin-top:8px;color:var(--red)">${e.message}</pre></div>`;
+  }
 }
 
 async function boot() {
-    const { months } = await fetchMonths();
-    const sel = document.getElementById('month-select');
+  const { months } = await fetchMonths();
+  const sel = document.getElementById('month-select');
 
-    if (!months || !months.length) {
-        document.getElementById('page').innerHTML =
-            '<div class="empty-state">No transactions found.<br>Run the ingester first.</div>';
-        return;
-    }
+  if (!months || !months.length) {
+    document.getElementById('page').innerHTML =
+      '<div class="empty-state">No transactions found.<br>Run the ingester first.</div>';
+    return;
+  }
 
-    months.forEach(ym => {
-        const opt = document.createElement('option');
-        opt.value = ym;
-        opt.textContent = monthLabel(ym);
-        sel.appendChild(opt);
-    });
+  months.forEach(ym => {
+    const opt = document.createElement('option');
+    opt.value = ym;
+    opt.textContent = monthLabel(ym);
+    sel.appendChild(opt);
+  });
 
-    const now = new Date();
-    const nowYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const target = months.includes(nowYm) ? nowYm : months[0];
-    sel.value = target;
-    loadMonth(target);
+  const now = new Date();
+  const nowYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const target = months.includes(nowYm) ? nowYm : months[0];
+  sel.value = target;
+  loadMonth(target);
 }
 
 boot();

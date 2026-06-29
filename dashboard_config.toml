@@ -19,7 +19,7 @@ categories = ["Transfers"]
 Dining        = 500
 Entertainment = 200
 Shopping      = 100
-Personal Care = 80
+"Personal Care" = 80
 Living        = 100
 
 # ── Dashboard sections ───────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ categories = ["Dining", "Entertainment"]
 [[sections]]
 name       = "Lifestyle"
 display    = "bar_comparison"
-categories = ["Transport", "Groceries", "Technology", "Health", "Bills"]
+categories = ["Transport", "Groceries", "Health", "Bills"]
 
 [[sections]]
 name       = "Watchlist"
@@ -44,4 +44,4 @@ categories = ["Shopping", "Personal Care", "Living"]
 [[sections]]
 name       = "Other"
 display    = "number"
-categories = ["Church", "Investment", "Vacation", "Gifts"]
+categories = ["Church", "Investment", "Vacation", "Gifts", "Technology"]
