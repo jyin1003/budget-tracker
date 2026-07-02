@@ -74,4 +74,3 @@ When an unknown merchant is encountered you'll be prompted to:
 The mapping is saved permanently — the same raw description will be auto-resolved in all future runs.
 
 ## To Do
-- fix header numbers
