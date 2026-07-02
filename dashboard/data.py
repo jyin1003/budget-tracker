@@ -183,9 +183,13 @@ def prev_month(ym: str) -> str:
 
 
 def fetch_spending(ym: str, cfg: DashboardConfig) -> dict[str, float]:
-    """Net spend per category: gross expenses minus any credits in the same category.
-    Excludes income/transfer categories via cfg.excluded_cats.
-    Returns positive float = net outflow (never negative; floored at 0)."""
+    """
+    Net spend per category for the given month.
+
+    For each category: gross expenses (negative txs, abs'd) minus any credits
+    (positive txs) in the same category. Floored at 0 so refunds never make a
+    bar go negative. Excludes categories in cfg.excluded_cats.
+    """
     start, end = month_range(ym)
     excl = [c.lower() for c in cfg.excluded_cats]
     with get_conn() as conn:
@@ -209,26 +213,75 @@ def fetch_spending(ym: str, cfg: DashboardConfig) -> dict[str, float]:
 
 
 def fetch_income(ym: str, cfg: DashboardConfig) -> float:
+    """
+    Total income for the month: sum of all positive-amount transactions,
+    excluding any categories in cfg.excluded_cats.
+    """
     start, end = month_range(ym)
-    accounts = cfg.income_accounts
-    if not accounts:
-        return 0.0
-    placeholders = ",".join("?" * len(accounts))
-    with get_conn() as conn:
-        row = conn.execute(f"""
+    excl = [c.lower() for c in cfg.excluded_cats]
+
+    if excl:
+        placeholders = ",".join("?" * len(excl))
+        query = f"""
             SELECT COALESCE(SUM(t.amount), 0) as total
             FROM transactions t
-            JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN categories c ON c.id = t.category_id
             WHERE t.date >= ? AND t.date <= ?
               AND t.amount > 0
-              AND a.name IN ({placeholders})
-        """, [start, end] + accounts).fetchone()
+              AND (c.name IS NULL OR LOWER(c.name) NOT IN ({placeholders}))
+        """
+        params = [start, end] + excl
+    else:
+        query = """
+            SELECT COALESCE(SUM(t.amount), 0) as total
+            FROM transactions t
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount > 0
+        """
+        params = [start, end]
+
+    with get_conn() as conn:
+        row = conn.execute(query, params).fetchone()
+    return round(float(row["total"]), 2)
+
+def fetch_total_spend(ym: str, cfg: DashboardConfig) -> float:
+    """
+    Total spending for the month: sum of ALL negative-amount transactions
+    (returned as a positive number). Excludes cfg.excluded_cats.
+    """
+    start, end = month_range(ym)
+    excl = [c.lower() for c in cfg.excluded_cats]
+
+    if excl:
+        placeholders = ",".join("?" * len(excl))
+        query = f"""
+            SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount < 0
+              AND (c.name IS NULL OR LOWER(c.name) NOT IN ({placeholders}))
+        """
+        params = [start, end] + excl
+    else:
+        query = """
+            SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
+            FROM transactions t
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount < 0
+        """
+        params = [start, end]
+
+    with get_conn() as conn:
+        row = conn.execute(query, params).fetchone()
     return round(float(row["total"]), 2)
 
 
 def fetch_transactions_for_category(ym: str, category: str) -> list[dict]:
-    """Return all transactions for a given month and category (expenses and credits),
-    sorted ascending by date then amount. Total is net (credits offset expenses)."""
+    """
+    All transactions for a given month and category, sorted by date then amount.
+    Includes both expenses and credits (refunds).
+    """
     start, end = month_range(ym)
     with get_conn() as conn:
         rows = conn.execute("""
@@ -247,12 +300,109 @@ def fetch_transactions_for_category(ym: str, category: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def fetch_income_transactions(ym: str, cfg: DashboardConfig) -> list[dict]:
+    """
+    All positive-amount transactions for the month, excluding cfg.excluded_cats.
+    Sorted by date ascending, then amount descending.
+    """
+    start, end = month_range(ym)
+    excl = [c.lower() for c in cfg.excluded_cats]
+
+    if excl:
+        placeholders = ",".join("?" * len(excl))
+        query = f"""
+            SELECT
+                t.date,
+                t.amount,
+                t.description,
+                m.name AS merchant,
+                c.name AS category
+            FROM transactions t
+            LEFT JOIN merchants  m ON m.id = t.merchant_id
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount > 0
+              AND (c.name IS NULL OR LOWER(c.name) NOT IN ({placeholders}))
+            ORDER BY t.date ASC, t.amount DESC
+        """
+        params = [start, end] + excl
+    else:
+        query = """
+            SELECT
+                t.date,
+                t.amount,
+                t.description,
+                m.name AS merchant,
+                c.name AS category
+            FROM transactions t
+            LEFT JOIN merchants  m ON m.id = t.merchant_id
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount > 0
+            ORDER BY t.date ASC, t.amount DESC
+        """
+        params = [start, end]
+
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
+
+def fetch_spend_transactions(ym: str, cfg: DashboardConfig) -> list[dict]:
+    """
+    All negative-amount transactions for the month (the full spend set).
+    Excludes cfg.excluded_cats. Sorted by date ascending, then amount ascending.
+    """
+    start, end = month_range(ym)
+    excl = [c.lower() for c in cfg.excluded_cats]
+
+    if excl:
+        placeholders = ",".join("?" * len(excl))
+        query = f"""
+            SELECT
+                t.date,
+                t.amount,
+                t.description,
+                m.name AS merchant,
+                c.name AS category
+            FROM transactions t
+            LEFT JOIN merchants  m ON m.id = t.merchant_id
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount < 0
+              AND (c.name IS NULL OR LOWER(c.name) NOT IN ({placeholders}))
+            ORDER BY t.date ASC, t.amount ASC
+        """
+        params = [start, end] + excl
+    else:
+        query = """
+            SELECT
+                t.date,
+                t.amount,
+                t.description,
+                m.name AS merchant,
+                c.name AS category
+            FROM transactions t
+            LEFT JOIN merchants  m ON m.id = t.merchant_id
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.date >= ? AND t.date <= ?
+              AND t.amount < 0
+            ORDER BY t.date ASC, t.amount ASC
+        """
+        params = [start, end]
+
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
+
+
 def fetch_dashboard_data(ym: str, cfg: DashboardConfig) -> dict:
     prev_ym     = prev_month(ym)
     spending    = fetch_spending(ym, cfg)
     prev_spend  = fetch_spending(prev_ym, cfg)
     income      = fetch_income(ym, cfg)
     prev_income = fetch_income(prev_ym, cfg)
+    total_spend = fetch_total_spend(ym, cfg)
+    prev_total  = fetch_total_spend(prev_ym, cfg)
 
     sections_data = []
     for sec in cfg.sections:
@@ -269,10 +419,6 @@ def fetch_dashboard_data(ym: str, cfg: DashboardConfig) -> dict:
             "display":    sec.display,
             "categories": cats_data,
         })
-
-    excl_lower  = [c.lower() for c in cfg.excluded_cats]
-    total_spend = round(sum(v for k, v in spending.items()   if k.lower() not in excl_lower), 2)
-    prev_total  = round(sum(v for k, v in prev_spend.items() if k.lower() not in excl_lower), 2)
 
     return {
         "month":       ym,

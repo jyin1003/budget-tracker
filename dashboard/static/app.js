@@ -23,6 +23,10 @@ function monthLabel(ym) {
   return `${names[m - 1]} ${y}`;
 }
 
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DATA
 // ══════════════════════════════════════════════════════════════════
@@ -48,12 +52,25 @@ async function fetchCategoryTransactions(ym, category) {
   return data;
 }
 
+async function fetchIncomeTransactions(ym) {
+  const r = await fetch(`/api/income_transactions?month=${encodeURIComponent(ym)}`);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+async function fetchSpendTransactions(ym) {
+  const r = await fetch(`/api/spend_transactions?month=${encodeURIComponent(ym)}`);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
 // ══════════════════════════════════════════════════════════════════
-// MODAL
+// MODAL — shared
 // ══════════════════════════════════════════════════════════════════
 
-function openTransactionModal(ym, category) {
-  // Remove any existing modal
+function openModal(title, subtitle, fetchFn, renderFn) {
   document.getElementById('tx-modal')?.remove();
 
   const overlay = document.createElement('div');
@@ -63,8 +80,8 @@ function openTransactionModal(ym, category) {
     <div class="modal-panel">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="modal-category">${category}</span>
-          <span class="modal-month">${monthLabel(ym)}</span>
+          <span class="modal-category">${title}</span>
+          <span class="modal-month">${subtitle}</span>
         </div>
         <button class="modal-close" id="modal-close-btn">✕</button>
       </div>
@@ -76,23 +93,17 @@ function openTransactionModal(ym, category) {
 
   document.body.appendChild(overlay);
 
-  // Close on backdrop click or × button
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
   document.getElementById('modal-close-btn').addEventListener('click', closeModal);
 
-  // Close on Escape
   const onKey = (e) => { if (e.key === 'Escape') closeModal(); };
   document.addEventListener('keydown', onKey);
   overlay._onKey = onKey;
 
-  // Trigger animation
   requestAnimationFrame(() => overlay.classList.add('open'));
 
-  // Fetch and render
-  fetchCategoryTransactions(ym, category)
-    .then(data => renderModalBody(data))
+  fetchFn()
+    .then(data => renderFn(data))
     .catch(err => {
       document.getElementById('modal-body').innerHTML =
         `<div class="modal-error">Failed to load: ${err.message}</div>`;
@@ -107,7 +118,18 @@ function closeModal() {
   overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
 }
 
-function renderModalBody(data) {
+// ── Category drill-down ───────────────────────────────────────────
+
+function openTransactionModal(ym, category) {
+  openModal(
+    category,
+    monthLabel(ym),
+    () => fetchCategoryTransactions(ym, category),
+    (data) => renderCategoryModalBody(data)
+  );
+}
+
+function renderCategoryModalBody(data) {
   const body = document.getElementById('modal-body');
   if (!body) return;
 
@@ -158,8 +180,82 @@ function renderModalBody(data) {
   `;
 }
 
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// ── Income drill-down ─────────────────────────────────────────────
+
+function openIncomeModal(ym) {
+  openModal(
+    'Income',
+    monthLabel(ym),
+    () => fetchIncomeTransactions(ym),
+    (data) => renderSummaryModalBody(data.transactions, 'income')
+  );
+}
+
+// ── Total Spending drill-down ─────────────────────────────────────
+
+function openSpendModal(ym) {
+  openModal(
+    'Total Spending',
+    monthLabel(ym),
+    () => fetchSpendTransactions(ym),
+    (data) => renderSummaryModalBody(data.transactions, 'spend')
+  );
+}
+
+// ── Shared renderer for income + spend modals (includes category col) ──
+
+function renderSummaryModalBody(txs, mode) {
+  const body = document.getElementById('modal-body');
+  if (!body) return;
+
+  if (!txs || !txs.length) {
+    body.innerHTML = `<div class="modal-empty">No transactions found.</div>`;
+    return;
+  }
+
+  const total = txs.reduce((sum, t) => sum + t.amount, 0);
+
+  const rows = txs.map(t => {
+    const label = t.merchant || t.description || '—';
+    const shortLabel = label.length > 36 ? label.slice(0, 36) + '…' : label;
+    const cat = t.category || '—';
+    const isCredit = t.amount > 0;
+    const amtCls = isCredit ? 'tx-amount credit' : 'tx-amount';
+    const amtStr = isCredit ? `+${fmtDec(t.amount)}` : fmtDec(Math.abs(t.amount));
+    return `
+      <tr>
+        <td class="tx-date">${t.date}</td>
+        <td class="tx-merchant" title="${esc(t.merchant || t.description || '')}">${esc(shortLabel)}</td>
+        <td class="tx-cat">${esc(cat)}</td>
+        <td class="${amtCls}">${amtStr}</td>
+      </tr>`;
+  }).join('');
+
+  // Total row
+  const isCredit = total > 0;
+  const totalLabel = mode === 'income' ? 'Total Income' : 'Total Spending';
+  const totalAmtCls = isCredit ? 'tx-total-amount credit' : 'tx-total-amount';
+  const totalAmtStr = isCredit ? `+${fmtDec(total)}` : fmtDec(Math.abs(total));
+
+  body.innerHTML = `
+    <table class="modal-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Merchant / Description</th>
+          <th>Category</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" class="tx-total-label">${totalLabel}</td>
+          <td class="${totalAmtCls}">${totalAmtStr}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -167,23 +263,26 @@ function esc(s) {
 // ══════════════════════════════════════════════════════════════════
 
 function renderSummary(data) {
+  // net = all credits minus all debits
   const net = data.income - data.total_spend;
   const netCls = net >= 0 ? 'income' : 'expense';
+  const netSign = net >= 0 ? '+' : '−';
+
   return `
     <div class="summary-strip">
-      <div class="summary-card">
-        <div class="label">Income</div>
+      <div class="summary-card clickable-summary" data-action="income">
+        <div class="label">Income <span class="card-hint">↗ view all</span></div>
         <div class="value income">${fmtDec(data.income)}</div>
         <div class="delta">${deltaHtml(data.income, data.prev_income, true)}</div>
       </div>
-      <div class="summary-card">
-        <div class="label">Total Spending</div>
+      <div class="summary-card clickable-summary" data-action="spend">
+        <div class="label">Total Spending <span class="card-hint">↗ view all</span></div>
         <div class="value expense">${fmtDec(data.total_spend)}</div>
         <div class="delta">${deltaHtml(data.total_spend, data.prev_total)}</div>
       </div>
       <div class="summary-card">
         <div class="label">Net</div>
-        <div class="value ${netCls}">${net >= 0 ? '+' : '−'}${fmtDec(Math.abs(net))}</div>
+        <div class="value ${netCls}">${netSign}${fmtDec(Math.abs(net))}</div>
         <div class="delta" style="color:var(--muted)">income minus spending</div>
       </div>
     </div>
@@ -211,7 +310,6 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
 
     const budgetPct = budget ? (budget / scaleMax) * 100 : null;
 
-    // % change label — always render something
     const diff = cat.amount - cat.prev;
     let diffLabel;
     if (!cat.prev && !cat.amount) {
@@ -232,12 +330,10 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
         <span class="bar-v-budget-label">${fmt(budget)}</span>
       </div>` : '';
 
-    // data attributes carry what to open on click
     return `
       <div class="bar-v-group">
         <div class="bar-v-chart">
           ${budgetLine}
-          <!-- prev bar -->
           <div class="bar-v-col prev-col">
             <div class="bar-v-amount prev-amt">${fmt(cat.prev)}</div>
             <div class="bar-v-bar-wrap">
@@ -248,7 +344,6 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
                    title="${esc(cat.name)} · ${monthLabel(prevYm)}"></div>
             </div>
           </div>
-          <!-- this month bar -->
           <div class="bar-v-col this-col">
             <div class="bar-v-amount this-amt">${fmtDec(cat.amount)}</div>
             <div class="bar-v-bar-wrap">
@@ -333,7 +428,11 @@ function renderNumbers(sec, currentYm, prevYm) {
 // RENDER — DASHBOARD + EVENT DELEGATION
 // ══════════════════════════════════════════════════════════════════
 
+// Store current month at module level so summary card handlers can read it
+let _currentYm = null;
+
 function renderDashboard(data) {
+  _currentYm = data.month;
   const currentYm = data.month;
   const prevYm = data.prev_month;
 
@@ -346,7 +445,16 @@ function renderDashboard(data) {
   const page = document.getElementById('page');
   page.innerHTML = renderSummary(data) + sections;
 
-  // Single delegated listener for all bars and number tiles
+  // Summary card drill-downs (Income + Total Spending)
+  page.querySelectorAll('.clickable-summary').forEach(card => {
+    card.addEventListener('click', () => {
+      const action = card.dataset.action;
+      if (action === 'income') openIncomeModal(currentYm);
+      else if (action === 'spend') openSpendModal(currentYm);
+    });
+  });
+
+  // Category bar + tile drill-downs
   page.addEventListener('click', (e) => {
     const bar = e.target.closest('.clickable-bar');
     const tile = e.target.closest('.clickable-tile');
@@ -356,7 +464,6 @@ function renderDashboard(data) {
       const cat = bar.dataset.category;
       if (ym && cat) openTransactionModal(ym, cat);
     } else if (tile) {
-      // Number tiles: current month on primary area; could add prev later
       const ym = tile.dataset.ym;
       const cat = tile.dataset.category;
       if (ym && cat) openTransactionModal(ym, cat);

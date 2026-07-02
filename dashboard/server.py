@@ -26,6 +26,8 @@ from config import DB_PATH
 from dashboard.data import (
     load_config, fetch_dashboard_data, available_months,
     fetch_transactions_for_category,
+    fetch_income_transactions,
+    fetch_spend_transactions,
 )
 
 STATIC_DIR = _HERE / "static"
@@ -87,6 +89,24 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 rows = fetch_transactions_for_category(ym, category)
                 self.send_json({"month": ym, "category": category, "transactions": rows})
+
+            elif path == "/api/income_transactions":
+                ym = params.get("month", [None])[0] or ""
+                if not ym:
+                    self.send_json({"error": "month required"}, 400)
+                    return
+                cfg  = load_config()
+                rows = fetch_income_transactions(ym, cfg)
+                self.send_json({"month": ym, "transactions": rows})
+
+            elif path == "/api/spend_transactions":
+                ym = params.get("month", [None])[0] or ""
+                if not ym:
+                    self.send_json({"error": "month required"}, 400)
+                    return
+                cfg  = load_config()
+                rows = fetch_spend_transactions(ym, cfg)
+                self.send_json({"month": ym, "transactions": rows})
 
             # ── Static files ─────────────────────────────────────
             elif path == "/" or path == "":

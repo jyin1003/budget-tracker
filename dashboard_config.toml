@@ -44,4 +44,4 @@ categories = ["Shopping", "Personal Care", "Living"]
 [[sections]]
 name       = "Other"
 display    = "number"
-categories = ["Church", "Investment", "Vacation", "Gifts", "Technology"]
+categories = ["Church", "Investment", "Vacation", "Gift", "Technology"]

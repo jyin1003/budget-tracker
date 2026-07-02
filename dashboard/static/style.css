@@ -673,3 +673,35 @@ body {
 .tx-total-amount.credit {
     color: var(--accent);
 }
+
+/* Summary cards — clickable Income and Total Spending */
+.summary-card.clickable-summary {
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.summary-card.clickable-summary:hover {
+    border-color: var(--border2);
+    background: var(--surface2);
+}
+
+.card-hint {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .04em;
+    color: var(--muted);
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+.summary-card.clickable-summary:hover .card-hint {
+    opacity: 1;
+}
+
+/* Category column in income/spend summary modals */
+.tx-cat {
+    color: var(--muted2);
+    font-size: 11px;
+    white-space: nowrap;
+}
