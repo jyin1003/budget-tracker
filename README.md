@@ -74,5 +74,5 @@ When an unknown merchant is encountered you'll be prompted to:
 The mapping is saved permanently — the same raw description will be auto-resolved in all future runs.
 
 ## To Do
-- over the budget line
-- time seties graph
+- Charts use fetch_spending() under the hood, so they'll inherit the Entertainment double-counting bug until that's resolved — worth fixing that first if you're about to start relying on these trend lines.- whats this
+- income not showing (its postive)

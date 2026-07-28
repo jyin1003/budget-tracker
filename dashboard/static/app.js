@@ -522,3 +522,183 @@ async function boot() {
 }
 
 boot();
+
+// ══════════════════════════════════════════════════════════════════
+// TRENDS TAB
+// ══════════════════════════════════════════════════════════════════
+
+const trendsState = {
+  allCategories: [],
+  selected: [],      // ordered — chart stacking order matches selection order
+  range: 6,           // 3 | 6 | 12
+};
+
+async function fetchAllCategories() {
+  const r = await fetch('/api/categories');
+  const data = await r.json();
+  return data.categories || [];
+}
+
+async function fetchTimeseries(categories, range) {
+  const qs = categories.map(c => `category=${encodeURIComponent(c)}`).join('&');
+  const r = await fetch(`/api/timeseries?${qs}&range=${range}`);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+function buildLineChartSvg(categoryName, points) {
+  const W = 860, H = 220, padL = 46, padR = 20, padT = 24, padB = 30;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  if (!points.length) {
+    return `<div class="chart-empty">No data for ${esc(categoryName)}.</div>`;
+  }
+
+  const maxVal = Math.max(...points.map(p => p.amount), 1);
+  const n = points.length;
+  const stepX = n > 1 ? innerW / (n - 1) : 0;
+
+  const coords = points.map((p, i) => {
+    const x = padL + (n > 1 ? i * stepX : innerW / 2);
+    const y = padT + innerH - (p.amount / maxVal) * innerH;
+    return { x, y, ...p };
+  });
+
+  // gridlines at 0%, 25%, 50%, 75%, 100% of maxVal
+  const gridlines = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const y = padT + innerH - f * innerH;
+    return `<line class="chart-gridline" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" />`;
+  }).join('');
+
+  const linePoints = coords.map(c => `${c.x},${c.y}`).join(' ');
+  const dots = coords.map(c => `<circle class="chart-dot" cx="${c.x}" cy="${c.y}" r="3.5" />`).join('');
+  const xLabels = coords.map(c =>
+    `<text class="chart-xlabel" x="${c.x}" y="${H - 8}" text-anchor="middle">${monthLabel(c.month)}</text>`
+  ).join('');
+  const vLabels = coords.map(c =>
+    `<text class="chart-vlabel" x="${c.x}" y="${Math.max(c.y - 10, 12)}" text-anchor="middle">${fmt(c.amount)}</text>`
+  ).join('');
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridlines}
+      <polyline class="chart-line" points="${linePoints}" />
+      ${dots}
+      ${vLabels}
+      ${xLabels}
+    </svg>`;
+}
+
+function renderTrendsToolbar() {
+  const catChips = trendsState.allCategories.map(cat => {
+    const isSel = trendsState.selected.includes(cat);
+    return `<button class="cat-chip ${isSel ? 'selected' : ''}" data-cat="${esc(cat)}">${esc(cat)}</button>`;
+  }).join('');
+
+  const scales = [[3, '3M'], [6, '6M'], [12, '1Y']];
+  const scaleBtns = scales.map(([val, label]) =>
+    `<button class="scale-btn ${trendsState.range === val ? 'selected' : ''}" data-range="${val}">${label}</button>`
+  ).join('');
+
+  return `
+    <div class="trends-toolbar">
+      <div class="trends-toolbar-row">
+        <span class="trends-toolbar-label">Categories</span>
+        ${catChips}
+      </div>
+      <div class="trends-toolbar-row">
+        <span class="trends-toolbar-label">Time scale</span>
+        ${scaleBtns}
+      </div>
+    </div>`;
+}
+
+async function renderTrendsCharts() {
+  const container = document.getElementById('trends-charts');
+  if (!container) return;
+
+  if (!trendsState.selected.length) {
+    container.innerHTML = `<div class="chart-empty">Select a category above to see its trend.</div>`;
+    return;
+  }
+
+  container.innerHTML = trendsState.selected.map(cat => `
+    <div class="section-card chart-card">
+      <div class="section-header">
+        <span class="section-title">${esc(cat)}</span>
+        <span class="section-subtitle">last ${trendsState.range === 12 ? '12 months' : trendsState.range + ' months'}</span>
+      </div>
+      <div class="section-body" id="chart-${cssSafe(cat)}"></div>
+    </div>
+  `).join('');
+
+  try {
+    const data = await fetchTimeseries(trendsState.selected, trendsState.range);
+    trendsState.selected.forEach(cat => {
+      const el = document.getElementById(`chart-${cssSafe(cat)}`);
+      if (el) el.innerHTML = buildLineChartSvg(cat, data.series[cat] || []);
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="chart-empty">Error loading trends: ${e.message}</div>`;
+  }
+}
+
+function cssSafe(s) {
+  return s.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+async function renderTrendsPage() {
+  const page = document.getElementById('trends-page');
+  page.innerHTML = renderTrendsToolbar() + `<div id="trends-charts"></div>`;
+
+  page.querySelectorAll('.cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const cat = chip.dataset.cat;
+      const idx = trendsState.selected.indexOf(cat);
+      if (idx >= 0) trendsState.selected.splice(idx, 1);
+      else trendsState.selected.push(cat);
+      renderTrendsPage();
+    });
+  });
+
+  page.querySelectorAll('.scale-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      trendsState.range = parseInt(btn.dataset.range, 10);
+      renderTrendsPage();
+    });
+  });
+
+  await renderTrendsCharts();
+}
+
+async function loadTrends() {
+  if (!trendsState.allCategories.length) {
+    trendsState.allCategories = await fetchAllCategories();
+  }
+  await renderTrendsPage();
+}
+
+// ── Tab switching ──────────────────────────────────────────────────
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const dashPage = document.getElementById('page');
+  const trendsPage = document.getElementById('trends-page');
+  const monthPicker = document.getElementById('month-picker');
+
+  if (tab === 'trends') {
+    dashPage.style.display = 'none';
+    trendsPage.style.display = '';
+    monthPicker.style.display = 'none';
+    loadTrends();
+  } else {
+    dashPage.style.display = '';
+    trendsPage.style.display = 'none';
+    monthPicker.style.display = '';
+  }
+}
+
+document.getElementById('tab-dashboard').addEventListener('click', () => switchTab('dashboard'));
+document.getElementById('tab-trends').addEventListener('click', () => switchTab('trends'));

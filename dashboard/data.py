@@ -430,3 +430,24 @@ def fetch_dashboard_data(ym: str, cfg: DashboardConfig) -> dict:
         "sections":    sections_data,
         "months":      available_months(),
     }
+    
+def list_categories() -> list[str]:
+    """All category names in the DB, alphabetical."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT name FROM categories ORDER BY name").fetchall()
+    return [r["name"] for r in rows]
+
+
+def fetch_category_timeseries(categories: list[str], num_months: int, cfg: DashboardConfig) -> dict[str, list[dict]]:
+    """
+    Monthly net spend per requested category, over the last `num_months`
+    months that have transaction data. Returned in chronological order
+    (oldest first) per category, as [{month, amount}, ...].
+    """
+    months = sorted(available_months()[:num_months])
+    series: dict[str, list[dict]] = {cat: [] for cat in categories}
+    for ym in months:
+        spend = fetch_spending(ym, cfg)
+        for cat in categories:
+            series[cat].append({"month": ym, "amount": spend.get(cat, 0.0)})
+    return series

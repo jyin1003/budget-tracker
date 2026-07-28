@@ -719,3 +719,158 @@ body {
     font-size: 11px;
     white-space: nowrap;
 }
+
+/* ── Tab nav ── */
+.tab-nav {
+    display: flex;
+    gap: 2px;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted2);
+    padding: 6px 14px;
+    border-radius: 4px;
+    letter-spacing: .04em;
+    transition: color .15s, background .15s;
+}
+
+.tab-btn:hover {
+    color: var(--text);
+    background: var(--border2);
+}
+
+.tab-btn.active {
+    color: var(--accent);
+    background: var(--accent-dim);
+}
+
+/* ── Trends toolbar ── */
+.trends-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 8px;
+}
+
+.trends-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.trends-toolbar-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted2);
+    width: 100px;
+    flex-shrink: 0;
+}
+
+.cat-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--muted2);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+}
+
+.cat-chip:hover {
+    border-color: var(--muted2);
+    color: var(--text);
+}
+
+.cat-chip.selected {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.scale-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--muted2);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+}
+
+.scale-btn:hover {
+    color: var(--text);
+    border-color: var(--muted2);
+}
+
+.scale-btn.selected {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ── Chart card ── */
+.chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.chart-card svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.chart-xlabel {
+    font-family: var(--mono);
+    font-size: 9px;
+    fill: var(--muted2);
+}
+
+.chart-vlabel {
+    font-family: var(--mono);
+    font-size: 9px;
+    fill: var(--text);
+}
+
+.chart-gridline {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.chart-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+}
+
+.chart-dot {
+    fill: var(--accent);
+}
+
+.chart-empty {
+    padding: 40px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted2);
+}
