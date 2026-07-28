@@ -308,7 +308,14 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
     const isWarn = budget && cat.amount > budget * 0.8 && !isOver;
     const barCls = isOver ? 'bar-v-fill over' : isWarn ? 'bar-v-fill warning' : 'bar-v-fill normal';
 
-    const budgetPct = budget ? (budget / scaleMax) * 100 : null;
+    // thisH/prevH are % of the 120px .bar-v-bar-wrap, but the budget line is
+    // positioned against the 160px .bar-v-chart — convert to the same basis
+    // so the line actually aligns with where the bar fill reaches.
+    const BAR_WRAP_HEIGHT = 120;
+    const CHART_HEIGHT = 160;
+    const budgetPct = budget
+      ? (budget / scaleMax) * (BAR_WRAP_HEIGHT / CHART_HEIGHT) * 100
+      : null;
 
     const diff = cat.amount - cat.prev;
     let diffLabel;
@@ -335,26 +342,26 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
       <div class="bar-v-group">
         <div class="bar-v-chart">
           ${budgetLine}
-          <div class="bar-v-col prev-col">
-            <div class="bar-v-amount prev-amt">${fmt(cat.prev)}</div>
-            <div class="bar-v-bar-wrap">
-              <div class="bar-v-fill prev clickable-bar"
-                   style="height:${prevH}%"
-                   data-ym="${prevYm}"
-                   data-category="${esc(cat.name)}"
-                   title="${esc(cat.name)} · ${monthLabel(prevYm)}"></div>
-            </div>
+        <div class="bar-v-col prev-col">
+          <div class="bar-v-bar-wrap">
+            <div class="bar-v-amount prev-amt" style="bottom:calc(${prevH}% + 4px)">${fmt(cat.prev)}</div>
+            <div class="bar-v-fill prev clickable-bar"
+                style="height:${prevH}%"
+                data-ym="${prevYm}"
+                data-category="${esc(cat.name)}"
+                title="${esc(cat.name)} · ${monthLabel(prevYm)}"></div>
           </div>
-          <div class="bar-v-col this-col">
-            <div class="bar-v-amount this-amt">${fmtDec(cat.amount)}</div>
-            <div class="bar-v-bar-wrap">
-              <div class="${barCls} clickable-bar"
-                   style="height:${thisH}%"
-                   data-ym="${currentYm}"
-                   data-category="${esc(cat.name)}"
-                   title="${esc(cat.name)} · ${monthLabel(currentYm)}"></div>
-            </div>
+        </div>
+        <div class="bar-v-col this-col">
+          <div class="bar-v-bar-wrap">
+            <div class="bar-v-amount this-amt" style="bottom:calc(${thisH}% + 4px)">${fmtDec(cat.amount)}</div>
+            <div class="${barCls} clickable-bar"
+                style="height:${thisH}%"
+                data-ym="${currentYm}"
+                data-category="${esc(cat.name)}"
+                title="${esc(cat.name)} · ${monthLabel(currentYm)}"></div>
           </div>
+        </div>
         </div>
         <div class="bar-v-xlabel">
           <span class="bar-v-catname">${cat.name}</span>

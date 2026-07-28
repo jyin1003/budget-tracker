@@ -25,6 +25,7 @@
     --yellow: #ffd166;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
+    --blue: #5b9dff;
 }
 
 html,
@@ -251,13 +252,12 @@ body {
 
 .bar-v-budget-label {
     position: absolute;
-    right: 0;
+    left: 0;
     top: -16px;
     font-family: var(--mono);
     font-size: 9px;
-    color: var(--muted2);
+    color: var(--blue);
     white-space: nowrap;
-    background: var(--surface);
     padding: 0 2px;
 }
 
@@ -294,10 +294,24 @@ body {
 .bar-v-bar-wrap {
     width: 100%;
     height: 120px;
+    position: relative;
     display: flex;
     align-items: flex-end;
     border-radius: 3px 3px 0 0;
-    overflow: hidden;
+    /* overflow: hidden removed — amount label needs to render above the fill */
+}
+
+.bar-v-amount {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 3;
 }
 
 .bar-v-fill {
