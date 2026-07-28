@@ -46,7 +46,7 @@ set_category        = "Technology"
 name                = "Rent Cash Out"
 merchant_contains   = "ATM"
 amount_exact        = [800.0]
-set_category        = "Living"
+set_category        = "Bills"
 
 [[rules]]
 name                = "Food Cash Out"
