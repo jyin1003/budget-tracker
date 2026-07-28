@@ -396,9 +396,7 @@ function renderBarComparison(sec, currentYm, prevYm) {
 function renderNumbers(sec, currentYm, prevYm) {
   const prevLabel = monthLabel(prevYm);
   const cells = sec.categories.map(cat => {
-    const prevStr = cat.prev
-      ? `<span class="num-prev-val">${fmtDec(cat.prev)}</span> <span class="num-prev-label">prev</span>`
-      : `<span class="num-prev-label">no prior data</span>`;
+    const prevStr = `<span class="num-prev-val">${fmtDec(cat.prev)}</span> <span class="num-prev-label">prev</span>`;
 
     return `
       <div class="number-cell clickable-tile"
