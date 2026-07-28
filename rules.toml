@@ -29,7 +29,7 @@
 name                = "Coles Amex transport top-up"
 account_contains    = "Amex"
 merchant_contains   = "Coles"
-amount_exact        = [50.0, 35.0]
+amount_exact        = [50.0, 35.0, 60.0]
 set_category        = "Transport"
 
 [[rules]]
@@ -42,22 +42,34 @@ name                = "ChatGPT Subscription"
 merchant_contains   = "Lawrence Chen"
 set_category        = "Technology"
 
-# ── More examples ───────────────────────────────────────────
+[[rules]]
+name                = "Rent Cash Out"
+merchant_contains   = "ATM"
+amount_exact        = [800.0]
+set_category        = "Living"
 
-# [[rules]]
-# name                = "Any Amex Uber over $80 is Travel not Transport"
-# account_contains    = "Amex"
-# merchant_contains   = "Uber"
-# amount_min          = 80.0
-# set_category        = "Travel"
+[[rules]]
+name                = "Food Cash Out"
+merchant_contains   = "ATM"
+amount_exact        = [50.0]
+set_category        = "Dining"
 
-# [[rules]]
-# name                = "All Spotify charges → Entertainment"
-# merchant_contains   = "Spotify"
-# set_category        = "Entertainment"
+[[rules]]
+name                = "Amex Direct Debit"
+description_contains   = "DIRECT DEBIT RECEIVED"
+set_category        = "AMEX Paymnet"
 
-# [[rules]]
-# name                = "Salary deposits → Income"
-# description_contains = "EMPLOYER NAME"
-# amount_min          = 1000.0
-# set_category        = "Income"
+[[rules]]
+name                = "Amex Repayment"
+description_contains   = "ONLINE PAYMENT RECEIVED"
+set_category        = "AMEX Paymnet"
+
+[[rules]]
+name                = "Badminton"
+merchant_contains   = "Kerilyee"
+set_category        = "Hobbies"
+
+[[rules]]
+name                = "Mahjong"
+merchant_contains   = "Lucky Tiles"
+set_category        = "Hobbies"
