@@ -315,7 +315,8 @@ function renderVerticalBars(sec, currentYm, prevYm, hasBudget) {
     if (!cat.prev && !cat.amount) {
       diffLabel = `<span class="bar-v-pct flat">—</span>`;
     } else if (!cat.prev) {
-      diffLabel = `<span class="bar-v-pct flat">new</span>`;
+      // prev was a real $0 — percentage change is undefined, so show the dollar delta instead
+      diffLabel = `<span class="bar-v-pct up">↑${fmt(cat.amount)} vs $0</span>`;
     } else if (Math.abs(diff) < 0.5) {
       diffLabel = `<span class="bar-v-pct flat">no change</span>`;
     } else {
