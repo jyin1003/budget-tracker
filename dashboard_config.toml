@@ -39,9 +39,9 @@ categories = ["Transport", "Groceries", "Health", "Bills"]
 [[sections]]
 name       = "Watchlist"
 display    = "bar_comparison"
-categories = ["Shopping", "Personal Care", "Living"]
+categories = ["Shopping", "Vacation", "Personal Care", "Living"]
 
 [[sections]]
 name       = "Other"
 display    = "number"
-categories = ["Church", "Investment", "Vacation", "Gift", "Technology"]
+categories = ["Church", "Investment", "Gift", "Technology"]
