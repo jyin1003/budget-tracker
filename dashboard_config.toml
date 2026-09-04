@@ -29,7 +29,7 @@ Living        = 100
 [[sections]]
 name       = "Social"
 display    = "bar_with_budget"
-categories = ["Dining", "Entertainment"]
+categories = ["Dining", "Entertainment", "Hobbies"]
 
 [[sections]]
 name       = "Lifestyle"

@@ -29,7 +29,7 @@
 name                = "Coles Amex transport top-up"
 account_contains    = "Amex"
 merchant_contains   = "Coles"
-amount_exact        = [50.0, 35.0, 60.0]
+amount_exact        = [50.0, 35.0, 60.0, 80.0]
 set_category        = "Transport"
 
 [[rules]]
@@ -56,13 +56,17 @@ set_category        = "Dining"
 
 [[rules]]
 name                = "Amex Direct Debit"
-description_contains   = "DIRECT DEBIT RECEIVED"
-set_category        = "AMEX Paymnet"
+merchant_contains   = "DIRECT DEBIT RECEIVED"
+set_description     = "AMEX Payment"
+set_merchant        = "Amex"
+set_category        = "Transfers"
 
 [[rules]]
 name                = "Amex Repayment"
-description_contains   = "ONLINE PAYMENT RECEIVED"
-set_category        = "AMEX Paymnet"
+merchant_contains   = "ONLINE PAYMENT RECEIVED"
+set_description     = "AMEX Payment"
+set_merchant        = "Amex"
+set_category        = "Transfers"
 
 [[rules]]
 name                = "Badminton"
@@ -73,3 +77,18 @@ set_category        = "Hobbies"
 name                = "Mahjong"
 merchant_contains   = "Lucky Tiles"
 set_category        = "Hobbies"
+
+[[rules]]
+name                = "Investment"
+merchant_contains   = "Broker"
+set_category        = "Investment"
+
+[[rules]]
+name                = "Church"
+merchant_contains   = "PRESBYTERIAN"
+set_category        = "Church"
+
+[[rules]]
+name                = "Woolworths"
+merchant_contains   = "WW METRO"
+set_merchant        = "Woolworths"
