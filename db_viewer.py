@@ -288,11 +288,11 @@ function switchTab(tab) {
   renderTab();
 }
 
-function renderTab() {
-  if (_editInProgress) return; // never re-render while editing
-  if (S.tab==='transactions') renderTransactions();
-  else if (S.tab==='merchants') renderMerchants();
-  else renderCategories();
+function renderTab(quiet=false) {
+  if (_editInProgress) return;
+  if (S.tab==='transactions') renderTransactions(quiet);
+  else if (S.tab==='merchants') renderMerchants(quiet);
+  else renderCategories(quiet);
 }
 
 function sortBy(col) {
@@ -363,8 +363,9 @@ function paginationHtml(totalPages, start, end) {
  * renderTab() is NEVER called from inside these helpers — the caller
  * decides when to re-render by setting _editInProgress = false first.
  */
-function makeEditableText(td, value, onSave) {
+function makeEditableText(td, value, onSave, applyDisplay) {
   _editInProgress = true;
+  const originalHtml = td.innerHTML;
   td.classList.remove('editable');
   td.classList.add('editing');
   td.innerHTML = '';
@@ -377,6 +378,12 @@ function makeEditableText(td, value, onSave) {
   inp.select();
 
   let committed = false;
+
+  const restore = (html) => {
+    td.classList.remove('editing');
+    td.classList.add('editable');
+    if (html !== undefined) td.innerHTML = html;
+  };
 
   const commit = async (save) => {
     if (committed) return;
@@ -392,30 +399,26 @@ function makeEditableText(td, value, onSave) {
       const res = await onSave(newVal);
       if (res?.error) {
         toast('Error: ' + res.error, 'err');
-        renderTab();
+        restore(originalHtml);
         return;
       }
       toast('Saved ✓');
+      restore();
+      if (applyDisplay) applyDisplay(td, newVal);
+      else td.innerHTML = esc(newVal);
+      return;
     }
-    renderTab();
+    restore(originalHtml);
   };
 
-  const outsideClick = (e) => {
-    if (!td.contains(e.target)) {
-      commit(true);
-    }
-  };
+  const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
 
   inp.addEventListener('keydown', (e) => {
     if (e.key === 'Enter')  { e.preventDefault(); commit(true);  }
     if (e.key === 'Escape') { e.preventDefault(); commit(false); }
   });
 
-  // Add the outside-click listener with a small delay so the click
-  // that opened this editor doesn't immediately close it.
-  setTimeout(() => {
-    document.addEventListener('mousedown', outsideClick, true);
-  }, 0);
+  setTimeout(() => document.addEventListener('mousedown', outsideClick, true), 0);
 }
 
 /**
@@ -427,8 +430,9 @@ function makeEditableText(td, value, onSave) {
  * The old approach used blur + setTimeout(120) which raced against renderTab.
  * Now we use mousedown-outside detection, same pattern as makeEditableText.
  */
-function makeEditableSelect(td, options, currentValue, onSave) {
+function makeEditableSelect(td, options, currentValue, onSave, applyDisplay) {
   _editInProgress = true;
+  const originalHtml = td.innerHTML;
   td.classList.remove('editable');
   td.classList.add('editing');
   td.innerHTML = '';
@@ -442,6 +446,12 @@ function makeEditableSelect(td, options, currentValue, onSave) {
   sel.focus();
 
   let committed = false;
+
+  const restore = (html) => {
+    td.classList.remove('editing');
+    td.classList.add('editable');
+    if (html !== undefined) td.innerHTML = html;
+  };
 
   const commit = async (save) => {
     if (committed) return;
@@ -457,34 +467,31 @@ function makeEditableSelect(td, options, currentValue, onSave) {
       const res = await onSave(sel.value, chosen?.name);
       if (res?.error) {
         toast('Error: ' + res.error, 'err');
-        renderTab();
+        restore(originalHtml);
         return;
       }
       toast('Saved ✓');
+      restore();
+      if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
+      return;
     }
-    renderTab();
+    restore(originalHtml);
   };
 
-  const outsideClick = (e) => {
-    if (!td.contains(e.target)) {
-      commit(true);
-    }
-  };
+  const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
 
   sel.addEventListener('change', () => commit(true));
   sel.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); commit(false); }
   });
 
-  setTimeout(() => {
-    document.addEventListener('mousedown', outsideClick, true);
-  }, 0);
+  setTimeout(() => document.addEventListener('mousedown', outsideClick, true), 0);
 }
 
 // ══════════════════════════════════════════════════════════════════
 // TRANSACTIONS
 // ══════════════════════════════════════════════════════════════════
-async function renderTransactions() {
+async function renderTransactions(quiet=false) {
   const main = document.getElementById('main-content');
   main.innerHTML = '<div class="empty loading">loading…</div>';
 
@@ -531,8 +538,7 @@ async function renderTransactions() {
       <label>max $<input id="amt-max" type="number" style="width:76px" placeholder="∞" value="${S.filters.amountMax}" oninput="debounceFilter()"></label>
       <button class="btn ghost" onclick="clearFilters()">clear</button>
       <button class="btn" onclick="addTransactionRow()" style="margin-left:auto">+ add row</button>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${S.total.toLocaleString()} rows</span>
-    </div>
+      <span id="tx-count" style="font-family:var(--mono);font-size:11px;color:var(--muted)">${S.total.toLocaleString()} rows</span>    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>${thHtml(cols)}</tr></thead>
@@ -551,8 +557,12 @@ async function renderTransactions() {
     return;
   }
 
+  S.txRows = new Map();
+  
   res.rows.forEach(row => {
     const tr = document.createElement('tr');
+    tr.dataset.id = row.id;
+    S.txRows.set(row.id, row);
     const amt = row.amount ?? 0;
     const amtStr = (amt<0?'-':'+') + '$' + Math.abs(amt).toFixed(2);
 
@@ -579,30 +589,56 @@ async function renderTransactions() {
     // editable cells
     tr.querySelectorAll('td.editable').forEach(td => {
       td.addEventListener('click', () => {
-        if (_editInProgress) return; // ignore clicks while another edit is open
+        if (_editInProgress) return;
         const field = td.dataset.field;
         if (field==='merchant') {
           const opts = S.meta.merchants || [];
           makeEditableSelect(td, opts, row.merchant, async (id) => {
             return apiPost('update', {table:'transactions', id:row.id, field:'merchant_id', value:id||null});
+          }, (td, name) => {
+            row.merchant = name || null;
+            td.innerHTML = name ? `<span class="pill">${esc(name)}</span>` : `<span class="pill none">—</span>`;
           });
         } else if (field==='category') {
           makeEditableSelect(td, S.meta.categories, row.category, async (id) => {
             return apiPost('update', {table:'transactions', id:row.id, field:'category_id', value:id||null});
+          }, (td, name) => {
+            row.category = name || null;
+            td.innerHTML = name ? `<span class="pill cat">${esc(name)}</span>` : `<span class="pill none">—</span>`;
           });
         } else if (field==='account') {
           makeEditableSelect(td, S.meta.accounts, row.account, async (id) => {
             return apiPost('update', {table:'transactions', id:row.id, field:'account_id', value:id||null});
+          }, (td, name) => {
+            row.account = name || null;
+            td.innerHTML = esc(name || '');
           });
         } else if (field==='amount') {
-          makeEditableText(td, String(amt), async (val) => {
+          makeEditableText(td, String(row.amount ?? 0), async (val) => {
             const n = parseFloat(val);
             if (isNaN(n)) return {error:'invalid number'};
             return apiPost('update', {table:'transactions', id:row.id, field:'amount', value:n});
+          }, (td, val) => {
+            const n = parseFloat(val);
+            row.amount = n;
+            td.classList.toggle('neg', n < 0);
+            td.classList.toggle('pos', n >= 0);
+            td.innerHTML = (n<0?'-':'+') + '$' + Math.abs(n).toFixed(2);
+          });
+        } else if (field==='description') {
+          makeEditableText(td, row[field]??'', async (val) => {
+            return apiPost('update', {table:'transactions', id:row.id, field, value:val});
+          }, (td, val) => {
+            row.description = val;
+            td.title = val;
+            td.innerHTML = esc(val.substring(0,50)) + (val.length>50?'…':'');
           });
         } else {
           makeEditableText(td, row[field]??'', async (val) => {
             return apiPost('update', {table:'transactions', id:row.id, field, value:val});
+          }, (td, val) => {
+            row[field] = val;
+            td.innerHTML = esc(val);
           });
         }
       });
@@ -661,7 +697,7 @@ async function addTransactionRow() {
 // ══════════════════════════════════════════════════════════════════
 // MERCHANTS
 // ══════════════════════════════════════════════════════════════════
-async function renderMerchants() {
+async function renderMerchants(quiet=false) {
   const main = document.getElementById('main-content');
   main.innerHTML = '<div class="empty loading">loading…</div>';
 
@@ -703,6 +739,7 @@ async function renderMerchants() {
     return;
   }
 
+  S.merchRows = new Map();
   res.rows.forEach((row, i) => {
     const mainTr = document.createElement('tr');
     const hasAliases = row.alias_count > 0;
@@ -719,6 +756,9 @@ async function renderMerchants() {
       if (_editInProgress) return;
       makeEditableText(this, row.name, async (val) => {
         return apiPost('update', {table:'merchants', id:row.id, field:'name', value:val});
+      }, (td, val) => {
+        row.name = val;
+        td.innerHTML = `<strong>${esc(val)}</strong>`;
       });
     });
 
@@ -726,6 +766,9 @@ async function renderMerchants() {
       if (_editInProgress) return;
       makeEditableSelect(this, S.meta.categories, row.category, async (id) => {
         return apiPost('update', {table:'merchants', id:row.id, field:'category_id', value:id||null});
+      }, (td, name) => {
+        row.category = name;
+        td.innerHTML = `<span class="pill cat">${esc(name || '')}</span>`;
       });
     });
 
@@ -789,7 +832,7 @@ async function addMerchantRow() {
 // ══════════════════════════════════════════════════════════════════
 // CATEGORIES
 // ══════════════════════════════════════════════════════════════════
-async function renderCategories() {
+async function renderCategories(quiet=false) {
   const main = document.getElementById('main-content');
   main.innerHTML = '<div class="empty loading">loading…</div>';
 
@@ -834,6 +877,9 @@ async function renderCategories() {
       if (_editInProgress) return;
       makeEditableText(this, row.name, async (val) => {
         return apiPost('update', {table:'categories', id:row.id, field:'name', value:val});
+      }, (td, val) => {
+        row.name = val;
+        td.innerHTML = `<span class="pill cat">${esc(val)}</span>`;
       });
     });
 
@@ -913,8 +959,30 @@ async function toggleExpand(detailId, btnId, loader) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// BACKGROUND SYNC — quietly reconciles the table with the server every
+// ~20s. Skips entirely while a cell is being edited or an add-row form
+// is open, and restores scroll position afterward so it's unnoticeable.
+// ══════════════════════════════════════════════════════════════════
+const BG_SYNC_INTERVAL_MS = 20000;
+let _bgSyncTimer = null;
+
+function startBackgroundSync() {
+  if (_bgSyncTimer) return;
+  _bgSyncTimer = setInterval(async () => {
+    if (_editInProgress) return;
+    if (document.querySelector('.new-row')) return;
+    const wrap = document.querySelector('.table-wrap');
+    const scrollTop = wrap ? wrap.scrollTop : 0;
+    await renderTab(true);
+    const wrap2 = document.querySelector('.table-wrap');
+    if (wrap2) wrap2.scrollTop = scrollTop;
+  }, BG_SYNC_INTERVAL_MS);
+}
+
 // ── boot
 renderTab();
+startBackgroundSync();
 </script>
 </body>
 </html>

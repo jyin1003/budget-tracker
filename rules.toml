@@ -74,6 +74,16 @@ merchant_contains   = "Kerilyee"
 set_category        = "Hobbies"
 
 [[rules]]
+name                = "Badminton"
+description_contains   = "Badminton"
+set_category        = "Hobbies"
+
+[[rules]]
+name                = "Woolworths"
+merchant_contains   = "WW"
+set_category        = "Hobbies"
+
+[[rules]]
 name                = "Mahjong"
 merchant_contains   = "Lucky Tiles"
 set_category        = "Hobbies"
@@ -90,5 +100,5 @@ set_category        = "Church"
 
 [[rules]]
 name                = "Woolworths"
-merchant_contains   = "WW METRO"
+merchant_contains   = "WW Metro"
 set_merchant        = "Woolworths"

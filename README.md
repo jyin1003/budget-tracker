@@ -79,3 +79,4 @@ The mapping is saved permanently — the same raw description will be auto-resol
 - add $ amount to ingestion
 - dashboard glitch
 - combine amexes
+- run rules first
