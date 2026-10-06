@@ -81,7 +81,7 @@ set_category        = "Hobbies"
 [[rules]]
 name                = "Woolworths"
 merchant_contains   = "WW"
-set_category        = "Hobbies"
+set_category        = "Groceries"
 
 [[rules]]
 name                = "Mahjong"
