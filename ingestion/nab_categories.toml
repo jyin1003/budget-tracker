@@ -1,0 +1,36 @@
+# nab_categories.toml — maps NAB's "Category" column to your categories.
+#
+# [hints]     Suggested category for merchants with no alias yet. Shown as the
+#             pre-selected option in merchant_cli. Never overrides an existing
+#             alias or rules.toml. NAB categories not listed here give no hint
+#             (e.g. "Uncategorised").
+# [overrides] Forced per transaction (positive amounts only), regardless of the
+#             merchant's category. Use for things that shouldn't follow the merchant.
+#
+# Right-hand names must match categories in the DB (case-insensitive).
+
+[hints]
+"Restaurants & takeaway"   = "Dining"
+"Cafe & coffee"            = "Dining"
+"Groceries"                = "Groceries"
+"Clothing & accessories"   = "Shopping"
+"Other shopping"           = "Shopping"
+"Electronics & technology" = "Technology"
+"Homeware"                 = "Living"
+"Home improvements"        = "Living"
+"Phone & internet"         = "Bills"
+"Fees"                     = "Other"
+"Medical"                  = "Health"
+"Gym & fitness"            = "Health"
+"Personal care"            = "Personal Care"
+"Public transport"         = "Transport"
+"Flights"                  = "Vacation"
+"Accommodation"            = "Vacation"
+"Travel expenses"          = "Vacation"
+"Attractions & events"     = "Entertainment"
+"Donations"                = "Church"
+"Internal transfers"       = "Transfers"
+"Other income"             = "Income"
+
+[overrides]
+"Refund" = "Income"

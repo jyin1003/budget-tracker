@@ -113,12 +113,7 @@ def _stage_alias(conn: sqlite3.Connection, raw: str, merchant_id: int) -> None:
 
 # ── Single merchant prompt ────────────────────────────────────────────────────
 
-def _prompt_one(
-    conn: sqlite3.Connection,
-    raw: str,
-    index: int,
-    total: int,
-) -> tuple[int, int]:
+def _prompt_one(conn, raw, index, total, hint: str | None = None) -> tuple[int, int]:
     """
     Resolve one unknown raw description interactively.
     Returns (merchant_id, category_id) — merchant committed, alias staged.
@@ -138,6 +133,13 @@ def _prompt_one(
 
     candidates = find_candidates(conn, raw)
     proposed_name = normalise(raw)
+    hint_id = None
+    if hint:
+        r = conn.execute(
+            "SELECT id FROM categories WHERE LOWER(name) = LOWER(?)", (hint,)
+        ).fetchone()
+        hint_id = r["id"] if r else None
+        print(f"  NAB  : {DIM(hint)}")
 
     # ── Show candidates if any ────────────────────────────────────────────────
     if candidates:
@@ -194,7 +196,7 @@ def _prompt_one(
         # (may have text if user typed, or "" if they hit Enter → use default)
         merchant_name = raw_input.strip().title() if raw_input else proposed_name
 
-    preselect = candidates[0][2] if candidates else None
+    preselect = candidates[0][2] if candidates else hint_id
     category_id = _prompt_category(conn, preselect_id=preselect)
     merchant_id = _upsert_merchant(conn, merchant_name, category_id)
     conn.commit()
@@ -211,10 +213,7 @@ def _prompt_one(
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def run_merchant_cli(
-    conn: sqlite3.Connection,
-    unknowns: list[str],
-) -> dict[str, tuple[int, int]]:
+def run_merchant_cli(conn, unknowns, hints: dict[str, str] | None = None):
     """
     Run the interactive CLI for all unknown raw descriptions in one batch.
 
@@ -235,9 +234,10 @@ def run_merchant_cli(
 
     resolved: dict[str, tuple[int, int]] = {}
     total = len(unknowns)
+    hints = hints or {}
 
     for i, raw in enumerate(unknowns, start=1):
-        merchant_id, category_id = _prompt_one(conn, raw, i, total)
+        merchant_id, category_id = _prompt_one(conn, raw, i, total, hints.get(raw))
         resolved[raw] = (merchant_id, category_id)
 
     print()

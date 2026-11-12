@@ -74,6 +74,8 @@ def main() -> None:
         # deduplicated — same raw string from two ingesters only prompts once.
         all_unknowns_ordered: list[str] = []
         seen_unknowns: set[str] = set()
+        
+        all_hints: dict[str, str] = {}
 
         for ingester in INGESTERS:
             staged_files = ingester.parse(conn)
@@ -87,6 +89,9 @@ def main() -> None:
                         if resolve_merchant(conn, raw) is None:
                             seen_unknowns.add(raw)
                             all_unknowns_ordered.append(raw)
+                for raw, cat in getattr(sf, "hints", {}).items():
+                    all_hints.setdefault(raw, cat)
+
 
         if not any(sf for _, files in staged_by_ingester for sf in files):
             print(GREEN("\n  Nothing to ingest — all statements up to date."))
@@ -94,7 +99,7 @@ def main() -> None:
 
         # ── Phase 2: Merchant CLI ─────────────────────────────────────────
         print(BOLD("\n── Phase 2: Merchant categorisation ──"))
-        resolved = run_merchant_cli(conn, all_unknowns_ordered)
+        resolved = run_merchant_cli(conn, all_unknowns_ordered, all_hints)
 
         # ── Phase 3: Commit ───────────────────────────────────────────────
         print(BOLD("── Phase 3: Committing transactions ──"))
