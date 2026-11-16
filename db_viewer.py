@@ -289,10 +289,10 @@ function switchTab(tab) {
 }
 
 function renderTab(quiet=false) {
-  if (_editInProgress) return;
-  if (S.tab==='transactions') renderTransactions(quiet);
-  else if (S.tab==='merchants') renderMerchants(quiet);
-  else renderCategories(quiet);
+  if (_editInProgress) return Promise.resolve();
+  if (S.tab==='transactions') return renderTransactions(quiet);
+  if (S.tab==='merchants')    return renderMerchants(quiet);
+  return renderCategories(quiet);
 }
 
 function sortBy(col) {
@@ -493,7 +493,7 @@ function makeEditableSelect(td, options, currentValue, onSave, applyDisplay) {
 // ══════════════════════════════════════════════════════════════════
 async function renderTransactions(quiet=false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = '<div class="empty loading">loading…</div>';
+  if (!quiet) main.innerHTML = '<div class="empty loading">loading…</div>';
 
   const [meta, res] = await Promise.all([
     apiGet('meta'),
@@ -503,6 +503,7 @@ async function renderTransactions(quiet=false) {
       amount_min:S.filters.amountMin, amount_max:S.filters.amountMax,
     })
   ]);
+  if (quiet && (_editInProgress || document.querySelector('.new-row'))) return;
   S.meta = meta;
   document.getElementById('db-path').textContent = meta.db_path;
   S.total = res.total;
@@ -699,12 +700,13 @@ async function addTransactionRow() {
 // ══════════════════════════════════════════════════════════════════
 async function renderMerchants(quiet=false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = '<div class="empty loading">loading…</div>';
+  if (!quiet) main.innerHTML = '<div class="empty loading">loading…</div>';
 
   const [meta, res] = await Promise.all([
     apiGet('meta'),
     apiGet('merchants', {page:S.page, page_size:S.pageSize, sort:S.sortCol, dir:S.sortDir, q:S.filters.q})
   ]);
+  if (quiet && (_editInProgress || document.querySelector('.new-row'))) return;
   S.meta = meta;
   S.total = res.total;
 
@@ -834,9 +836,10 @@ async function addMerchantRow() {
 // ══════════════════════════════════════════════════════════════════
 async function renderCategories(quiet=false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = '<div class="empty loading">loading…</div>';
+  if (!quiet) main.innerHTML = '<div class="empty loading">loading…</div>';
 
   const [meta, res] = await Promise.all([apiGet('meta'), apiGet('categories')]);
+  if (quiet && (_editInProgress || document.querySelector('.new-row'))) return;
   S.meta = meta;
 
   main.innerHTML = `
@@ -970,13 +973,19 @@ let _bgSyncTimer = null;
 function startBackgroundSync() {
   if (_bgSyncTimer) return;
   _bgSyncTimer = setInterval(async () => {
-    if (_editInProgress) return;
+    if (_editInProgress || document.hidden) return;
     if (document.querySelector('.new-row')) return;
+    const ae = document.activeElement;
+    if (ae && ['INPUT','SELECT','TEXTAREA'].includes(ae.tagName)) return;
+
     const wrap = document.querySelector('.table-wrap');
-    const scrollTop = wrap ? wrap.scrollTop : 0;
-    await renderTab(true);
+    const top = wrap ? wrap.scrollTop : 0;
+    const left = wrap ? wrap.scrollLeft : 0;
+
+    await renderTab(true);   // now actually waits for the render
+
     const wrap2 = document.querySelector('.table-wrap');
-    if (wrap2) wrap2.scrollTop = scrollTop;
+    if (wrap2) { wrap2.scrollTop = top; wrap2.scrollLeft = left; }
   }, BG_SYNC_INTERVAL_MS);
 }
 
