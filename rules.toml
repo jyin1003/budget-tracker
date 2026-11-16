@@ -32,6 +32,12 @@ merchant_contains   = "Coles"
 amount_exact        = [50.0, 35.0, 60.0, 80.0]
 set_category        = "Transport"
 
+name                = "Coles transport top-up"
+account_contains    = "NAB Classic"
+merchant_contains   = "Coles"
+amount_exact        = [50.0, 35.0, 60.0, 80.0]
+set_category        = "Transport"
+
 [[rules]]
 name                = "Beem merchant matching"
 merchant_contains   = "Beem"

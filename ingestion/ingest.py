@@ -28,11 +28,12 @@ from db.db import resolve_merchant
 from ingestion.merchant_cli import run_merchant_cli
 
 # ── Ingester registry — add new ingesters here ───────────────────────────────
-from ingestion import amex_ingest, up_ingest
+from ingestion import amex_ingest, up_ingest, nab_ingest
 
 INGESTERS = [
     amex_ingest,
-    up_ingest
+    up_ingest,
+    nab_ingest
 ]
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────

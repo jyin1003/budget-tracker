@@ -59,7 +59,7 @@ ACCOUNT_NAME = "NAB Classic"   # TODO: confirm account name
 ACCOUNT_TYPE = "debit"
 CURRENCY     = "AUD"
 
-MAP_PATH = _ROOT / "nab_categories.toml"
+MAP_PATH = _ROOT / "ingestion" / "nab_categories.toml"
 
 _DATE_FORMATS = ("%d %b %y", "%d %b %Y", "%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d")
 
