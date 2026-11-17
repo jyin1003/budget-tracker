@@ -173,6 +173,34 @@ HTML = r"""<!DOCTYPE html>
   .neg { color: var(--red); }
   .pos { color: var(--accent); }
 
+  /* hide-notes toggle */
+  .hide-notes [data-col="notes"] { display: none; }
+
+  /* toggle switch (toolbar) */
+  .toolbar .switch {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    user-select: none; font-family: var(--mono); font-size: 11px;
+    color: var(--muted); transition: color .15s;
+  }
+  .toolbar .switch:hover { color: var(--text); }
+  .toolbar .switch input {
+    position: absolute; opacity: 0; width: 0; height: 0; padding: 0; border: none;
+  }
+  .switch .track {
+    position: relative; width: 28px; height: 16px; border-radius: 20px;
+    background: var(--border2); border: 1px solid var(--border2);
+    transition: background .15s, border-color .15s;
+  }
+  .switch .track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 10px; height: 10px; border-radius: 50%; background: var(--muted);
+    transition: transform .15s, background .15s;
+  }
+  .switch input:checked + .track { background: rgba(79,255,176,.15); border-color: rgba(79,255,176,.4); }
+  .switch input:checked + .track::after { transform: translateX(12px); background: var(--accent); }
+  .switch input:focus-visible + .track { border-color: var(--accent); }
+  .switch input:checked ~ .label-text { color: var(--accent); }
+
   /* pagination */
   .pagination {
     padding: 10px 24px; border-top: 1px solid var(--border);
@@ -240,6 +268,7 @@ const S = {
   sortCol: 'date', sortDir: 'desc',
   filters: { q:'', category:'', account:'', amountMin:'', amountMax:'' },
   meta: { categories:[], accounts:[] },
+  hideNotes: (() => { try { return localStorage.getItem('hideNotes') === '1'; } catch { return false; } })(),
 };
 
 // Global flag: prevents renderTab() from firing while a cell is being edited.
@@ -323,12 +352,20 @@ function clearFilters() {
   S.page=1; renderTab();
 }
 
+// Toggle the Notes column. Pure CSS-class flip — no re-render, no server call.
+// Choice persists in localStorage across reloads.
+function toggleNotes(checked) {
+  S.hideNotes = checked;
+  try { localStorage.setItem('hideNotes', checked ? '1' : '0'); } catch {}
+  document.querySelector('.table-wrap table')?.classList.toggle('hide-notes', checked);
+}
+
 function thHtml(cols) {
   return cols.map(c => {
     if (c.noSort) return `<th class="no-sort">${c.label}</th>`;
     const sorted = S.sortCol===c.key;
     const arrow = sorted ? (S.sortDir==='asc'?'↑':'↓') : '↕';
-    return `<th class="${sorted?'sorted':''}" onclick="sortBy('${c.key}')">${c.label} <span class="arrow">${arrow}</span></th>`;
+    return `<th data-col="${c.key}" class="${sorted?'sorted':''}" onclick="sortBy('${c.key}')">${c.label} <span class="arrow">${arrow}</span></th>`;
   }).join('');
 }
 
@@ -374,7 +411,6 @@ function makeEditableText(td, value, onSave, applyDisplay) {
   inp.type = 'text';
   inp.value = value ?? '';
   td.appendChild(inp);
-  inp.addEventListener('click', (e) => e.stopPropagation());
   inp.focus();
   inp.select();
 
@@ -391,22 +427,25 @@ function makeEditableText(td, value, onSave, applyDisplay) {
     committed = true;
     document.removeEventListener('mousedown', outsideClick, true);
 
-    const chosen = options.find(o => String(o.id) === sel.value);
-    const changed = (chosen?.name ?? '') !== (currentValue ?? '');
+    const newVal = inp.value.trim();
+    const changed = newVal !== (value ?? '').trim();
 
-    try {
-      if (save && changed) {
-        const res = await onSave(sel.value, chosen?.name);
-        if (res?.error) { toast('Error: ' + res.error, 'err'); restore(originalHtml); return; }
-        toast('Saved ✓');
-        restore();
-        if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
+    _editInProgress = false;
+
+    if (save && changed) {
+      const res = await onSave(newVal);
+      if (res?.error) {
+        toast('Error: ' + res.error, 'err');
+        restore(originalHtml);
         return;
       }
-      restore(originalHtml);
-    } finally {
-      _editInProgress = false;
+      toast('Saved ✓');
+      restore();
+      if (applyDisplay) applyDisplay(td, newVal);
+      else td.innerHTML = esc(newVal);
+      return;
     }
+    restore(originalHtml);
   };
 
   const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
@@ -441,7 +480,6 @@ function makeEditableSelect(td, options, currentValue, onSave, applyDisplay) {
       `<option value="${o.id}" ${(o.name === currentValue || String(o.id) === String(currentValue)) ? 'selected' : ''}>${esc(o.name)}</option>`
     ).join('');
   td.appendChild(sel);
-  sel.addEventListener('click', (e) => e.stopPropagation());
   sel.focus();
 
   let committed = false;
@@ -460,19 +498,21 @@ function makeEditableSelect(td, options, currentValue, onSave, applyDisplay) {
     const chosen = options.find(o => String(o.id) === sel.value);
     const changed = (chosen?.name ?? '') !== (currentValue ?? '');
 
-    try {
-      if (save && changed) {
-        const res = await onSave(sel.value, chosen?.name);
-        if (res?.error) { toast('Error: ' + res.error, 'err'); restore(originalHtml); return; }
-        toast('Saved ✓');
-        restore();
-        if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
+    _editInProgress = false;
+
+    if (save && changed) {
+      const res = await onSave(sel.value, chosen?.name);
+      if (res?.error) {
+        toast('Error: ' + res.error, 'err');
+        restore(originalHtml);
         return;
       }
-      restore(originalHtml);
-    } finally {
-      _editInProgress = false;
+      toast('Saved ✓');
+      restore();
+      if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
+      return;
     }
+    restore(originalHtml);
   };
 
   const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
@@ -535,10 +575,11 @@ async function renderTransactions(quiet=false) {
       <label>min $<input id="amt-min" type="number" style="width:76px" placeholder="0" value="${S.filters.amountMin}" oninput="debounceFilter()"></label>
       <label>max $<input id="amt-max" type="number" style="width:76px" placeholder="∞" value="${S.filters.amountMax}" oninput="debounceFilter()"></label>
       <button class="btn ghost" onclick="clearFilters()">clear</button>
+      <label class="switch"><input type="checkbox" ${S.hideNotes?'checked':''} onchange="toggleNotes(this.checked)"><span class="track"></span><span class="label-text">hide notes</span></label>
       <button class="btn" onclick="addTransactionRow()" style="margin-left:auto">+ add row</button>
       <span id="tx-count" style="font-family:var(--mono);font-size:11px;color:var(--muted)">${S.total.toLocaleString()} rows</span>    </div>
     <div class="table-wrap">
-      <table>
+      <table class="${S.hideNotes ? 'hide-notes' : ''}">
         <thead><tr>${thHtml(cols)}</tr></thead>
         <tbody id="tx-tbody"></tbody>
       </table>
@@ -571,7 +612,7 @@ async function renderTransactions(quiet=false) {
       <td class="editable" data-field="category">${row.category?`<span class="pill cat">${esc(row.category)}</span>`:`<span class="pill none">—</span>`}</td>
       <td class="editable" data-field="account">${esc(row.account)}</td>
       <td class="editable ${amt<0?'neg':'pos'}" data-field="amount" style="text-align:right">${amtStr}</td>
-      <td class="editable" data-field="notes" style="color:var(--muted)">${esc(row.notes||'')}</td>
+      <td class="editable" data-col="notes" data-field="notes" style="color:var(--muted)">${esc(row.notes||'')}</td>
       <td style="width:28px"><button class="del-btn" title="delete">✕</button></td>
     `;
 
@@ -668,7 +709,7 @@ async function addTransactionRow() {
     <td><select id="nr-cat"><option value="">— none —</option>${catOpts}</select></td>
     <td><select id="nr-acc"><option value="">— none —</option>${accOpts}</select></td>
     <td><input id="nr-amt" type="number" step="0.01" placeholder="0.00" style="width:90px"></td>
-    <td><input id="nr-notes" type="text" placeholder="notes (optional)"></td>
+    <td data-col="notes"><input id="nr-notes" type="text" placeholder="notes (optional)"></td>
     <td>
       <button class="btn" style="padding:3px 9px;font-size:11px" id="nr-save">✓</button>
       <button class="btn ghost" style="padding:3px 7px;font-size:11px;margin-left:3px" onclick="this.closest('tr').remove()">✕</button>

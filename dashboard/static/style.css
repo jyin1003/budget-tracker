@@ -688,6 +688,77 @@ body {
     color: var(--accent);
 }
 
+/* hide-notes toggle */
+.hide-notes [data-col="notes"] {
+    display: none;
+}
+
+/* toggle switch (toolbar) */
+.toolbar .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    transition: color .15s;
+}
+
+.toolbar .switch:hover {
+    color: var(--text);
+}
+
+.toolbar .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    padding: 0;
+    border: none;
+}
+
+.switch .track {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    border-radius: 20px;
+    background: var(--border2);
+    border: 1px solid var(--border2);
+    transition: background .15s, border-color .15s;
+}
+
+.switch .track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform .15s, background .15s;
+}
+
+.switch input:checked+.track {
+    background: rgba(79, 255, 176, .15);
+    border-color: rgba(79, 255, 176, .4);
+}
+
+.switch input:checked+.track::after {
+    transform: translateX(12px);
+    background: var(--accent);
+}
+
+.switch input:focus-visible+.track {
+    border-color: var(--accent);
+}
+
+.switch input:checked~.label-text {
+    color: var(--accent);
+}
+
 /* Summary cards — clickable Income and Total Spending */
 .summary-card.clickable-summary {
     cursor: pointer;
