@@ -431,12 +431,29 @@ def fetch_dashboard_data(ym: str, cfg: DashboardConfig) -> dict:
         "months":      available_months(),
     }
     
+_HIDDEN_TREND_CATS = {"income", "transfers"}
+
 def list_categories() -> list[str]:
-    """All category names in the DB, alphabetical."""
+    """Category names for the trends chips (Income/Transfers hidden), alphabetical."""
     with get_conn() as conn:
         rows = conn.execute("SELECT name FROM categories ORDER BY name").fetchall()
-    return [r["name"] for r in rows]
+    return [r["name"] for r in rows if r["name"].lower() not in _HIDDEN_TREND_CATS]
 
+
+def fetch_summary_timeseries(num_months: int, cfg: DashboardConfig) -> dict[str, list[dict]]:
+    """
+    Monthly total income, total spend and net (income - spend) over the last
+    `num_months` months with data. Uses the same functions as the summary cards.
+    """
+    months = sorted(available_months()[:num_months])
+    series: dict[str, list[dict]] = {"income": [], "spend": [], "net": []}
+    for ym in months:
+        income = fetch_income(ym, cfg)
+        spend  = fetch_total_spend(ym, cfg)
+        series["income"].append({"month": ym, "amount": income})
+        series["spend"].append({"month": ym, "amount": spend})
+        series["net"].append({"month": ym, "amount": round(income - spend, 2)})
+    return series
 
 def fetch_category_timeseries(categories: list[str], num_months: int, cfg: DashboardConfig) -> dict[str, list[dict]]:
     """

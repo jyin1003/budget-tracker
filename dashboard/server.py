@@ -30,6 +30,7 @@ from dashboard.data import (
     fetch_spend_transactions,
     fetch_category_timeseries,
     list_categories,
+    fetch_summary_timeseries
 )
 
 STATIC_DIR = _HERE / "static"
@@ -125,6 +126,14 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = load_config()
                 series = fetch_category_timeseries(cats, num_months, cfg)
                 self.send_json({"range": num_months, "categories": cats, "series": series})
+
+            elif path == "/api/summary_timeseries":
+                try:
+                    num_months = int(params.get("range", ["6"])[0])
+                except ValueError:
+                    num_months = 6
+                cfg = load_config()
+                self.send_json({"range": num_months, "series": fetch_summary_timeseries(num_months, cfg)})
 
             # ── Static files ─────────────────────────────────────
             elif path == "/" or path == "":

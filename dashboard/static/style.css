@@ -873,7 +873,8 @@ body {
     color: var(--accent);
 }
 
-.scale-btn {
+.scale-btn,
+.summary-tab {
     background: var(--surface2);
     border: 1px solid var(--border2);
     color: var(--muted2);
@@ -885,18 +886,26 @@ body {
     transition: border-color .15s, color .15s, background .15s;
 }
 
-.scale-btn:hover {
+.scale-btn:hover,
+.summary-tab:hover {
     color: var(--text);
     border-color: var(--muted2);
 }
 
-.scale-btn.selected {
+.scale-btn.selected,
+.summary-tab.selected {
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);
 }
 
 /* ── Chart card ── */
+.chart-zero {
+    stroke: var(--muted2);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+}
+
 .chart-card {
     background: var(--surface);
     border: 1px solid var(--border);

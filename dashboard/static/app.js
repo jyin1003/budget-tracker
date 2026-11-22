@@ -532,6 +532,8 @@ const trendsState = {
   selected: [],
   range: 6,
   multi: false,      // single graph by default
+  summaryTab: 'income',   // 'income' | 'spend' | 'net'
+  summaryData: null,
 };
 
 async function fetchAllCategories() {
@@ -548,7 +550,7 @@ async function fetchTimeseries(categories, range) {
   return data;
 }
 
-function buildLineChartSvg(categoryName, points) {
+function buildLineChartSvg(categoryName, points, { signed = false } = {}) {
   const W = 860, H = 220, padL = 46, padR = 20, padT = 24, padB = 30;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
@@ -557,39 +559,88 @@ function buildLineChartSvg(categoryName, points) {
     return `<div class="chart-empty">No data for ${esc(categoryName)}.</div>`;
   }
 
-  const maxVal = Math.max(...points.map(p => p.amount), 1);
+  const vals = points.map(p => p.amount);
+  const maxVal = Math.max(...vals, 1);
+  const minVal = signed ? Math.min(...vals, 0) : 0;
+  const span = (maxVal - minVal) || 1;
+  const yOf = v => padT + innerH - ((v - minVal) / span) * innerH;
   const n = points.length;
   const stepX = n > 1 ? innerW / (n - 1) : 0;
 
-  const coords = points.map((p, i) => {
-    const x = padL + (n > 1 ? i * stepX : innerW / 2);
-    const y = padT + innerH - (p.amount / maxVal) * innerH;
-    return { x, y, ...p };
-  });
+  const coords = points.map((p, i) => ({
+    x: padL + (n > 1 ? i * stepX : innerW / 2),
+    y: yOf(p.amount),
+    ...p,
+  }));
 
-  // gridlines at 0%, 25%, 50%, 75%, 100% of maxVal
   const gridlines = [0, 0.25, 0.5, 0.75, 1].map(f => {
     const y = padT + innerH - f * innerH;
     return `<line class="chart-gridline" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" />`;
   }).join('');
 
+  const zeroLine = (signed && minVal < 0)
+    ? `<line class="chart-zero" x1="${padL}" y1="${yOf(0)}" x2="${W - padR}" y2="${yOf(0)}" />`
+    : '';
+
+  const label = (v) => signed ? `${v < 0 ? '−' : '+'}${fmt(v)}` : fmt(v);
   const linePoints = coords.map(c => `${c.x},${c.y}`).join(' ');
   const dots = coords.map(c => `<circle class="chart-dot" cx="${c.x}" cy="${c.y}" r="3.5" />`).join('');
   const xLabels = coords.map(c =>
     `<text class="chart-xlabel" x="${c.x}" y="${H - 8}" text-anchor="middle">${monthLabel(c.month)}</text>`
   ).join('');
   const vLabels = coords.map(c =>
-    `<text class="chart-vlabel" x="${c.x}" y="${Math.max(c.y - 10, 12)}" text-anchor="middle">${fmt(c.amount)}</text>`
+    `<text class="chart-vlabel" x="${c.x}" y="${Math.max(c.y - 10, 12)}" text-anchor="middle">${label(c.amount)}</text>`
   ).join('');
 
   return `
     <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
       ${gridlines}
+      ${zeroLine}
       <polyline class="chart-line" points="${linePoints}" />
       ${dots}
       ${vLabels}
       ${xLabels}
     </svg>`;
+}
+
+const SUMMARY_TABS = [['income', 'Total income'], ['spend', 'Total spend'], ['net', 'Net']];
+
+function renderSummaryBox() {
+  const tabs = SUMMARY_TABS.map(([key, label]) =>
+    `<button class="summary-tab ${trendsState.summaryTab === key ? 'selected' : ''}" data-tab="${key}">${label}</button>`
+  ).join('');
+  const rangeLabel = trendsState.range === 12 ? '12 months' : trendsState.range + ' months';
+  return `
+    <div class="section-card chart-card">
+      <div class="section-header">
+        <span class="section-title">Summary</span>
+        <span class="section-subtitle">last ${rangeLabel}</span>
+      </div>
+      <div class="trends-toolbar-row" style="padding:14px 20px 0">${tabs}</div>
+      <div class="section-body" id="summary-chart"><div class="chart-empty">loading…</div></div>
+    </div>`;
+}
+
+function drawSummaryChart() {
+  const el = document.getElementById('summary-chart');
+  if (!el) return;
+  const key = trendsState.summaryTab;
+  const label = SUMMARY_TABS.find(t => t[0] === key)[1];
+  const points = trendsState.summaryData?.[key] || [];
+  el.innerHTML = buildLineChartSvg(label, points, { signed: key === 'net' });
+}
+
+async function loadSummary() {
+  try {
+    const r = await fetch(`/api/summary_timeseries?range=${trendsState.range}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'API error');
+    trendsState.summaryData = data.series;
+    drawSummaryChart();
+  } catch (e) {
+    const el = document.getElementById('summary-chart');
+    if (el) el.innerHTML = `<div class="chart-empty">Error loading summary: ${e.message}</div>`;
+  }
 }
 
 function renderTrendsToolbar() {
@@ -653,7 +704,7 @@ function cssSafe(s) {
 
 async function renderTrendsPage() {
   const page = document.getElementById('trends-page');
-  page.innerHTML = renderTrendsToolbar() + `<div id="trends-charts"></div>`;
+  page.innerHTML = renderSummaryBox() + renderTrendsToolbar() + `<div id="trends-charts"></div>`;
 
   page.querySelectorAll('.cat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -667,6 +718,16 @@ async function renderTrendsPage() {
       }
       renderTrendsPage();
     });
+
+    page.querySelectorAll('.summary-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        trendsState.summaryTab = btn.dataset.tab;
+        page.querySelectorAll('.summary-tab').forEach(b => b.classList.toggle('selected', b === btn));
+        drawSummaryChart();
+      });
+    });
+
+    await Promise.all([renderTrendsCharts(), loadSummary()]);
   });
 
   document.getElementById('multi-toggle').addEventListener('change', (e) => {
