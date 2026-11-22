@@ -430,22 +430,24 @@ function makeEditableText(td, value, onSave, applyDisplay) {
     const newVal = inp.value.trim();
     const changed = newVal !== (value ?? '').trim();
 
-    _editInProgress = false;
-
-    if (save && changed) {
-      const res = await onSave(newVal);
-      if (res?.error) {
-        toast('Error: ' + res.error, 'err');
-        restore(originalHtml);
+    try {
+      if (save && changed) {
+        const res = await onSave(newVal);
+        if (res?.error) {
+          toast('Error: ' + res.error, 'err');
+          restore(originalHtml);
+          return;
+        }
+        toast('Saved ✓');
+        restore();
+        if (applyDisplay) applyDisplay(td, newVal);
+        else td.innerHTML = esc(newVal);
         return;
       }
-      toast('Saved ✓');
-      restore();
-      if (applyDisplay) applyDisplay(td, newVal);
-      else td.innerHTML = esc(newVal);
-      return;
+      restore(originalHtml);
+    } finally {
+      _editInProgress = false;
     }
-    restore(originalHtml);
   };
 
   const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
@@ -498,21 +500,23 @@ function makeEditableSelect(td, options, currentValue, onSave, applyDisplay) {
     const chosen = options.find(o => String(o.id) === sel.value);
     const changed = (chosen?.name ?? '') !== (currentValue ?? '');
 
-    _editInProgress = false;
-
-    if (save && changed) {
-      const res = await onSave(sel.value, chosen?.name);
-      if (res?.error) {
-        toast('Error: ' + res.error, 'err');
-        restore(originalHtml);
+    try {
+      if (save && changed) {
+        const res = await onSave(sel.value, chosen?.name);
+        if (res?.error) {
+          toast('Error: ' + res.error, 'err');
+          restore(originalHtml);
+          return;
+        }
+        toast('Saved ✓');
+        restore();
+        if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
         return;
       }
-      toast('Saved ✓');
-      restore();
-      if (applyDisplay) applyDisplay(td, chosen?.name, chosen);
-      return;
+      restore(originalHtml);
+    } finally {
+      _editInProgress = false;
     }
-    restore(originalHtml);
   };
 
   const outsideClick = (e) => { if (!td.contains(e.target)) commit(true); };
