@@ -529,8 +529,9 @@ boot();
 
 const trendsState = {
   allCategories: [],
-  selected: [],      // ordered — chart stacking order matches selection order
-  range: 6,           // 3 | 6 | 12
+  selected: [],
+  range: 6,
+  multi: false,      // single graph by default
 };
 
 async function fetchAllCategories() {
@@ -607,10 +608,11 @@ function renderTrendsToolbar() {
       <div class="trends-toolbar-row">
         <span class="trends-toolbar-label">Categories</span>
         ${catChips}
-      </div>
-      <div class="trends-toolbar-row">
-        <span class="trends-toolbar-label">Time scale</span>
-        ${scaleBtns}
+        <label class="switch" style="margin-left:auto">
+          <input type="checkbox" id="multi-toggle" ${trendsState.multi ? 'checked' : ''}>
+          <span class="track"></span>
+          <span class="label-text">multi-select</span>
+        </label>
       </div>
     </div>`;
 }
@@ -656,18 +658,24 @@ async function renderTrendsPage() {
   page.querySelectorAll('.cat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const cat = chip.dataset.cat;
-      const idx = trendsState.selected.indexOf(cat);
-      if (idx >= 0) trendsState.selected.splice(idx, 1);
-      else trendsState.selected.push(cat);
+      if (trendsState.multi) {
+        const idx = trendsState.selected.indexOf(cat);
+        if (idx >= 0) trendsState.selected.splice(idx, 1);
+        else trendsState.selected.push(cat);
+      } else {
+        trendsState.selected = [cat];   // single mode: replace selection
+      }
       renderTrendsPage();
     });
   });
 
-  page.querySelectorAll('.scale-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      trendsState.range = parseInt(btn.dataset.range, 10);
-      renderTrendsPage();
-    });
+  document.getElementById('multi-toggle').addEventListener('change', (e) => {
+    trendsState.multi = e.target.checked;
+    if (!trendsState.multi && trendsState.selected.length > 1) {
+      // collapse to the most recently selected category
+      trendsState.selected = [trendsState.selected[trendsState.selected.length - 1]];
+    }
+    renderTrendsPage();
   });
 
   await renderTrendsCharts();

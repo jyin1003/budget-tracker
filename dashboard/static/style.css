@@ -694,7 +694,7 @@ body {
 }
 
 /* toggle switch (toolbar) */
-.toolbar .switch {
+.switch {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -706,11 +706,11 @@ body {
     transition: color .15s;
 }
 
-.toolbar .switch:hover {
+.switch:hover {
     color: var(--text);
 }
 
-.toolbar .switch input {
+.switch input {
     position: absolute;
     opacity: 0;
     width: 0;
