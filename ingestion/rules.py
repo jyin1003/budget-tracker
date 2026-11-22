@@ -149,6 +149,28 @@ def load_rules(path: Path | None = None) -> list[Rule]:
 
 
 # ── Apply rules ───────────────────────────────────────────────────────────────
+def rule_matches(rule: Rule, *, account: str | None, merchant: str | None,
+                 description: str | None, amount: float) -> bool:
+    """AND-match one rule. If no merchant is resolved yet, merchant_contains
+    falls back to the raw description."""
+    abs_amt = abs(amount)
+    acc   = (account or "").lower()
+    desc  = (description or "").lower()
+    merch = (merchant or "").lower() or desc
+
+    if rule.account_contains and rule.account_contains.lower() not in acc:
+        return False
+    if rule.merchant_contains and rule.merchant_contains.lower() not in merch:
+        return False
+    if rule.description_contains and rule.description_contains.lower() not in desc:
+        return False
+    if rule.amount_exact and not any(abs(abs_amt - ex) < 0.005 for ex in rule.amount_exact):
+        return False
+    if rule.amount_min is not None and abs_amt < rule.amount_min:
+        return False
+    if rule.amount_max is not None and abs_amt > rule.amount_max:
+        return False
+    return True
 
 def apply_rules(conn, rules: list[Rule] | None = None, since: str | None = None) -> int:
     """
@@ -232,18 +254,13 @@ def apply_rules(conn, rules: list[Rule] | None = None, since: str | None = None)
         acc_lower   = (tx["account_name"] or "").lower()
 
         for rule, new_mid, new_cid in validated:
-            if rule.account_contains and rule.account_contains.lower() not in acc_lower:
-                continue
-            if rule.merchant_contains and rule.merchant_contains.lower() not in merch_lower:
-                continue
-            if rule.description_contains and rule.description_contains.lower() not in desc_lower:
-                continue
-            if rule.amount_exact:
-                if not any(abs(abs_amt - ex) < 0.005 for ex in rule.amount_exact):
-                    continue
-            if rule.amount_min is not None and abs_amt < rule.amount_min:
-                continue
-            if rule.amount_max is not None and abs_amt > rule.amount_max:
+            if not rule_matches(
+                rule,
+                account=tx["account_name"],
+                merchant=tx["merchant_name"],
+                description=tx["description"],
+                amount=tx["amount"],
+            ):
                 continue
 
             updates: dict[str, int] = {}

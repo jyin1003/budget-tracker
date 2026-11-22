@@ -77,3 +77,4 @@ The mapping is saved permanently — the same raw description will be auto-resol
 - Charts use fetch_spending() under the hood, so they'll inherit the Entertainment double-counting bug until that's resolved — worth fixing that first if you're about to start relying on these trend lines.- whats this
 - add $ amount to ingestion
 - run rules first
+- income trend chart doesnt work

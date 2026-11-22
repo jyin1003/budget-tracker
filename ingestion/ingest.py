@@ -50,6 +50,25 @@ YELLOW= lambda t: _c("93", t)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def _rule_covered(conn, rules, staged_by_ingester, candidates: set[str]) -> set[str]:
+    """Raw descriptions where EVERY pending row matches at least one rule."""
+    status: dict[str, bool] = {}
+    for _, files in staged_by_ingester:
+        for sf in files:
+            acc = conn.execute(
+                "SELECT name FROM accounts WHERE id = ?", (sf.account_id,)
+            ).fetchone()["name"]
+            for row in sf.rows:
+                if row.description not in candidates:
+                    continue
+                hit = any(
+                    rule_matches(r, account=acc, merchant=None,
+                                 description=row.description, amount=row.amount)
+                    for r in rules
+                )
+                status[row.description] = status.get(row.description, True) and hit
+    return {d for d, ok in status.items() if ok}
+
 def main() -> None:
     ingest_start_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -96,6 +115,13 @@ def main() -> None:
                 for row in sf.rows:
                     all_amounts.setdefault(row.description, []).append(row.amount)
 
+        rules = load_rules()
+        if rules and all_unknowns_ordered:
+            covered = _rule_covered(conn, rules, staged_by_ingester, set(all_unknowns_ordered))
+            if covered:
+                print(f"  {DIM(f'[rules] {len(covered)} description(s) handled by rules — skipping CLI')}")
+                all_unknowns_ordered = [r for r in all_unknowns_ordered if r not in covered]
+
         if not any(sf for _, files in staged_by_ingester for sf in files):
             print(GREEN("\n  Nothing to ingest — all statements up to date."))
             return
@@ -121,7 +147,7 @@ def main() -> None:
         
         # ── Phase 3: Rules ────────────────────────────────────────────────
         print(BOLD("\n── Phase 3: Applying rules ──"))
-        from ingestion.rules import apply_rules
+        from ingestion.rules import apply_rules, load_rules, rule_matches
         apply_rules(conn, since=ingest_start_time)
 
         # ── Summary ───────────────────────────────────────────────────────
