@@ -112,8 +112,24 @@ def _stage_alias(conn: sqlite3.Connection, raw: str, merchant_id: int) -> None:
 
 
 # ── Single merchant prompt ────────────────────────────────────────────────────
+def _fmt_amounts(amounts: list[float] | None) -> str | None:
+    """Format one or more transaction amounts for display, e.g. -$12.34 or -$5.00, -$7.50 (+2 more)."""
+    if not amounts:
+        return None
 
-def _prompt_one(conn, raw, index, total, hint: str | None = None) -> tuple[int, int]:
+    def one(a: float) -> str:
+        text = f"{'-' if a < 0 else '+'}${abs(a):,.2f}"
+        return RED(text) if a < 0 else GREEN(text)
+
+    shown = ", ".join(one(a) for a in amounts[:3])
+    if len(amounts) > 3:
+        shown += DIM(f"  (+{len(amounts) - 3} more, {len(amounts)} txns)")
+    elif len(amounts) > 1:
+        shown += DIM(f"  ({len(amounts)} txns)")
+    return shown
+
+def _prompt_one(conn, raw, index, total, hint: str | None = None,
+                amounts: list[float] | None = None) -> tuple[int, int]:
     """
     Resolve one unknown raw description interactively.
     Returns (merchant_id, category_id) — merchant committed, alias staged.
@@ -130,6 +146,9 @@ def _prompt_one(conn, raw, index, total, hint: str | None = None) -> tuple[int, 
     print("─" * 64)
     print(BOLD(f"  [{index}/{total}] New merchant"))
     print(f"  Raw : {YELLOW(raw)}")
+    amt_str = _fmt_amounts(amounts)
+    if amt_str:
+        print(f"  Amt : {amt_str}")
 
     candidates = find_candidates(conn, raw)
     proposed_name = normalise(raw)
@@ -213,7 +232,8 @@ def _prompt_one(conn, raw, index, total, hint: str | None = None) -> tuple[int, 
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def run_merchant_cli(conn, unknowns, hints: dict[str, str] | None = None):
+def run_merchant_cli(conn, unknowns, hints: dict[str, str] | None = None,
+                        amounts: dict[str, list[float]] | None = None):
     """
     Run the interactive CLI for all unknown raw descriptions in one batch.
 
@@ -235,9 +255,12 @@ def run_merchant_cli(conn, unknowns, hints: dict[str, str] | None = None):
     resolved: dict[str, tuple[int, int]] = {}
     total = len(unknowns)
     hints = hints or {}
+    amounts = amounts or {}
 
     for i, raw in enumerate(unknowns, start=1):
-        merchant_id, category_id = _prompt_one(conn, raw, i, total, hints.get(raw))
+        merchant_id, category_id = _prompt_one(
+            conn, raw, i, total, hints.get(raw), amounts.get(raw)
+        )
         resolved[raw] = (merchant_id, category_id)
 
     print()

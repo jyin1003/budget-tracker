@@ -77,6 +77,7 @@ def main() -> None:
         seen_unknowns: set[str] = set()
         
         all_hints: dict[str, str] = {}
+        all_amounts: dict[str, list[float]] = {}
 
         for ingester in INGESTERS:
             staged_files = ingester.parse(conn)
@@ -92,7 +93,8 @@ def main() -> None:
                             all_unknowns_ordered.append(raw)
                 for raw, cat in getattr(sf, "hints", {}).items():
                     all_hints.setdefault(raw, cat)
-
+                for row in sf.rows:
+                    all_amounts.setdefault(row.description, []).append(row.amount)
 
         if not any(sf for _, files in staged_by_ingester for sf in files):
             print(GREEN("\n  Nothing to ingest — all statements up to date."))
@@ -100,7 +102,7 @@ def main() -> None:
 
         # ── Phase 2: Merchant CLI ─────────────────────────────────────────
         print(BOLD("\n── Phase 2: Merchant categorisation ──"))
-        resolved = run_merchant_cli(conn, all_unknowns_ordered, all_hints)
+        resolved = run_merchant_cli(conn, all_unknowns_ordered, all_hints, all_amounts)
 
         # ── Phase 3: Commit ───────────────────────────────────────────────
         print(BOLD("── Phase 3: Committing transactions ──"))
